@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/noirbizarre/gonja/config"
-	"github.com/noirbizarre/gonja/nodes"
-	"github.com/noirbizarre/gonja/tokens"
+	"github.com/aisbergg/gonja/config"
+	"github.com/aisbergg/gonja/nodes"
+	"github.com/aisbergg/gonja/tokens"
 )
 
 // The parser provides you a comprehensive and easy tool to

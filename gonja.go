@@ -1,9 +1,9 @@
 package gonja
 
 import (
-	"github.com/noirbizarre/gonja/config"
-	"github.com/noirbizarre/gonja/exec"
-	"github.com/noirbizarre/gonja/loaders"
+	"github.com/aisbergg/gonja/config"
+	"github.com/aisbergg/gonja/exec"
+	"github.com/aisbergg/gonja/loaders"
 )
 
 var (
@@ -27,7 +27,8 @@ var (
 
 // Must panics, if a Template couldn't successfully parsed. This is how you
 // would use it:
-//     var baseTemplate = gonja.Must(gonja.FromFile("templates/base.html"))
+//
+//	var baseTemplate = gonja.Must(gonja.FromFile("templates/base.html"))
 func Must(tpl *exec.Template, err error) *exec.Template {
 	if err != nil {
 		panic(err)

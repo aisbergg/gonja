@@ -1,8 +1,8 @@
 package parser
 
 import (
+	"github.com/aisbergg/gonja/tokens"
 	"github.com/goph/emperror"
-	"github.com/noirbizarre/gonja/tokens"
 	"github.com/pkg/errors"
 )
 

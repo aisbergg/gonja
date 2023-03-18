@@ -1,4 +1,5 @@
-//+build mage
+//go:build mage
+// +build mage
 
 package main
 
@@ -12,7 +13,7 @@ import (
 )
 
 const (
-	packageName = "github.com/noirbizarre/gonja"
+	packageName = "github.com/aisbergg/gonja"
 )
 
 var Default = All

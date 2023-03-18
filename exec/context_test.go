@@ -3,7 +3,7 @@ package exec_test
 import (
 	"testing"
 
-	"github.com/noirbizarre/gonja/exec"
+	"github.com/aisbergg/gonja/exec"
 	"github.com/stretchr/testify/assert"
 )
 

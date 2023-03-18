@@ -12,8 +12,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/noirbizarre/gonja/exec"
-	u "github.com/noirbizarre/gonja/utils"
+	"github.com/aisbergg/gonja/exec"
+	u "github.com/aisbergg/gonja/utils"
 )
 
 func init() {

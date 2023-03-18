@@ -24,8 +24,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/noirbizarre/gonja/nodes"
-	"github.com/noirbizarre/gonja/parser"
+	"github.com/aisbergg/gonja/nodes"
+	"github.com/aisbergg/gonja/parser"
 )
 
 // type NodeStatement interface {

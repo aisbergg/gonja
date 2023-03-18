@@ -3,8 +3,8 @@ package parser
 import (
 	"fmt"
 
-	"github.com/noirbizarre/gonja/nodes"
-	"github.com/noirbizarre/gonja/tokens"
+	"github.com/aisbergg/gonja/nodes"
+	"github.com/aisbergg/gonja/tokens"
 	log "github.com/sirupsen/logrus"
 )
 

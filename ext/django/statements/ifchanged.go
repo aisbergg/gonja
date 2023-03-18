@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/noirbizarre/gonja/exec"
-	"github.com/noirbizarre/gonja/nodes"
-	"github.com/noirbizarre/gonja/parser"
-	"github.com/noirbizarre/gonja/tokens"
+	"github.com/aisbergg/gonja/exec"
+	"github.com/aisbergg/gonja/nodes"
+	"github.com/aisbergg/gonja/parser"
+	"github.com/aisbergg/gonja/tokens"
 	"github.com/pkg/errors"
 )
 
