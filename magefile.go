@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	packageName = "github.com/aisbergg/gonja"
+	packageName = "github.com/aisbergg/gonja/pkg/gonja"
 )
 
 var Default = All

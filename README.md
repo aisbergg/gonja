@@ -74,7 +74,7 @@ Please use the [issue tracker](https://github.com/aisbergg/gonja/issues) if you'
 
  * Write [filters](https://github.com/aisbergg/gonja/blob/master/builtins/filters.go#L3) / [statements](https://github.com/aisbergg/gonja/blob/master/builtins/statements.go#L4)
  * Write/improve code tests (use the following command to see what tests are missing: `go test -v -cover -covermode=count -coverprofile=cover.out && go tool cover -html=cover.out` or have a look on [gocover.io/github.com/aisbergg/gonja](http://gocover.io/github.com/aisbergg/gonja))
- * Write/improve template tests (see the `testData/` directory)
+ * Write/improve template tests (see the `testdata/` directory)
  * Write middleware, libraries and websites using gonja. :-)
 
 # Documentation
@@ -117,7 +117,7 @@ fmt.Println(out) // Output: Hello Axel!
 package main
 
 import (
-	"github.com/aisbergg/gonja"
+	"github.com/aisbergg/gonja/pkg/gonja"
 	"net/http"
 )
 
@@ -149,7 +149,7 @@ The benchmarks have been run on the my machine (`Intel(R) Core(TM) i7-2600 CPU @
 
     go test -bench . -cpu 1,2,4,8
 
-All benchmarks are compiling (depends on the benchmark) and executing the `testData/complex.tpl` template.
+All benchmarks are compiling (depends on the benchmark) and executing the `testdata/complex.tpl` template.
 
 The results are:
 
