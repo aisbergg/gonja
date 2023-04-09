@@ -41,6 +41,10 @@ type Value struct {
 	// Safe indicates whether the value needs explicit escaping in the template
 	// or not.
 	Safe bool
+
+	// undefined indicates whether the value is undefined or not. It is used to
+	// avoid reevaluating the value and checking for undefinedness.
+	undefined bool
 }
 
 // AsValue wraps a given value in a `Value` container. Usually being used within
@@ -107,25 +111,41 @@ func ToValue(val any) *Value {
 	}
 }
 
+// toUndefinedValue returns a `Value` container with the `Undefined` flag set to true.
+func toUndefinedValue(undVal Undefined) *Value {
+	return &Value{
+		Val:       reflect.ValueOf(undVal),
+		IndVal:    reflect.ValueOf(undVal),
+		undefined: true,
+	}
+}
+
 // IsDefined reports whether the underlying value is defined.
 func (v *Value) IsDefined() bool {
-	return v.IndVal.IsValid() && !v.IndVal.Type().Implements(rtUndefined)
+	return !v.undefined
 }
 
 // IsString reports whether the underlying value is a string.
 func (v *Value) IsString() bool {
-	fmt.Println(v.IndVal)
-	fmt.Println(v.IndVal.IsValid())
+	if v.undefined {
+		return v.Val.Interface().(Undefined).IsString()
+	}
 	return v.IndVal.IsValid() && v.IndVal.Kind() == reflect.String
 }
 
 // IsBool reports whether the underlying value is a bool.
 func (v *Value) IsBool() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).IsBool()
+	}
 	return v.IndVal.IsValid() && v.IndVal.Kind() == reflect.Bool
 }
 
 // IsFloat reports whether the underlying value is a float.
 func (v *Value) IsFloat() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).IsFloat()
+	}
 	return v.IndVal.IsValid() &&
 		(v.IndVal.Kind() == reflect.Float32 ||
 			v.IndVal.Kind() == reflect.Float64)
@@ -133,6 +153,9 @@ func (v *Value) IsFloat() bool {
 
 // IsInteger reports whether the underlying value is an integer.
 func (v *Value) IsInteger() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).IsInteger()
+	}
 	if !v.IndVal.IsValid() {
 		return false
 	}
@@ -149,16 +172,25 @@ func (v *Value) IsInteger() bool {
 // IsNumber reports whether the underlying value is either an integer or a
 // float.
 func (v *Value) IsNumber() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).IsNumber()
+	}
 	return v.IndVal.IsValid() && (v.IsInteger() || v.IsFloat())
 }
 
 // IsCallable reports whether the underlying value is a callable function.
 func (v *Value) IsCallable() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).IsCallable()
+	}
 	return v.IndVal.IsValid() && v.IndVal.Kind() == reflect.Func
 }
 
 // IsList reports whether the underlying value is a list.
 func (v *Value) IsList() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).IsList()
+	}
 	return v.IndVal.IsValid() &&
 		(v.IndVal.Kind() == reflect.Array ||
 			v.IndVal.Kind() == reflect.Slice)
@@ -166,6 +198,9 @@ func (v *Value) IsList() bool {
 
 // IsDict reports whether the underlying value is a dictionary.
 func (v *Value) IsDict() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).IsDict()
+	}
 	return v.IndVal.IsValid() &&
 		(v.IndVal.Kind() == reflect.Map ||
 			(v.IndVal.Kind() == reflect.Struct && v.IndVal.Type() == TypeDict))
@@ -174,11 +209,17 @@ func (v *Value) IsDict() bool {
 // IsIterable reports whether the underlying value is an iterable type. Iterable
 // types are strings, lists and dictionaries.
 func (v *Value) IsIterable() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).IsIterable()
+	}
 	return v.IndVal.IsValid() && (v.IsString() || v.IsList() || v.IsDict())
 }
 
 // IsNil reports whether the underlying value is NIL.
 func (v *Value) IsNil() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).IsNil()
+	}
 	return !v.IndVal.IsValid()
 }
 
@@ -197,6 +238,9 @@ func (v *Value) IsNil() bool {
 // NIL values will lead to an empty string. Unsupported types are leading to
 // their respective type name.
 func (v *Value) String() string {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).String()
+	}
 	if v.IsNil() {
 		return ""
 	}
@@ -291,6 +335,9 @@ func (v *Value) Escaped() string {
 // value, if necessary). If it's not possible to convert the underlying value,
 // it will return 0.
 func (v *Value) Integer() int {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).Integer()
+	}
 	if v.IsNil() {
 		errors.ThrowTemplateRuntimeError("nil cannot be converted to integer")
 	}
@@ -324,6 +371,9 @@ func (v *Value) Integer() int {
 // value, if necessary). If it's not possible to convert the underlying value,
 // it will return 0.0.
 func (v *Value) Float() float64 {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).Float()
+	}
 	if v.IsNil() {
 		errors.ThrowTemplateRuntimeError("nil cannot be converted to float")
 	}
@@ -357,6 +407,9 @@ func (v *Value) Float() float64 {
 // will always be returned. If you're looking for true/false-evaluation of the
 // underlying value, have a look on the IsTrue()-function.
 func (v *Value) Bool() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).Bool()
+	}
 	if v.IsNil() {
 		errors.ThrowTemplateRuntimeError("nil cannot be converted to bool")
 	}
@@ -385,6 +438,9 @@ func (v *Value) Bool() bool {
 //
 // Otherwise returns always FALSE.
 func (v *Value) IsTrue() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).IsTrue()
+	}
 	if v.IsNil() {
 		return false
 	}
@@ -409,57 +465,18 @@ func (v *Value) IsTrue() bool {
 		return true // struct instance is always true
 
 	default:
-		errors.ThrowTemplateRuntimeError("Value.IsTrue() not available for type: %s", v.IndVal.Kind().String())
+		errors.ThrowTemplateRuntimeError("type %s cannot be evaluated to boolean", v.IndVal.Kind().String())
 	}
 
 	return false
 }
 
-// Negate tries to negate the underlying value. It's mainly used for the
-// NOT-operator and in conjunction with a call to return_value.IsTrue()
-// afterwards.
-//
-// Example:
-//
-//	AsValue(1).Negate().IsTrue() == false
-func (v *Value) Negate() *Value {
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil cannot be negated")
-	}
-
-	switch v.IndVal.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		if v.Integer() != 0 {
-			return AsValue(0)
-		}
-		return AsValue(1)
-
-	case reflect.Float32, reflect.Float64:
-		if v.Float() != 0.0 {
-			return AsValue(float64(0.0))
-		}
-		return AsValue(float64(1.1))
-
-	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
-		return AsValue(v.IndVal.Len() == 0)
-
-	case reflect.Bool:
-		return AsValue(!v.IndVal.Bool())
-
-	case reflect.Struct:
-		return AsValue(false)
-
-	default:
-		errors.ThrowTemplateRuntimeError("type %s cannot be negated", v.IndVal.Kind().String())
-	}
-
-	return nil
-}
-
 // Len returns the length for an array, chan, map, slice or string. Otherwise it
 // will return 0.
 func (v *Value) Len() int {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).Len()
+	}
 	if v.IsNil() {
 		errors.ThrowTemplateRuntimeError("nil has no length")
 	}
@@ -482,6 +499,9 @@ func (v *Value) Len() int {
 // Slice slices an array, slice or string. Otherwise it will return an empty
 // []int.
 func (v *Value) Slice(i, j int) *Value {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).Slice(i, j)
+	}
 	if v.IsNil() {
 		errors.ThrowTemplateRuntimeError("nil cannot be sliced")
 	}
@@ -504,6 +524,9 @@ func (v *Value) Slice(i, j int) *Value {
 // Index gets the i-th item of an array, slice or string. Otherwise it will
 // return NIL.
 func (v *Value) Index(i int) *Value {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).Index(i)
+	}
 	if v.IsNil() {
 		errors.ThrowTemplateRuntimeError("nil cannot be indexed")
 	}
@@ -539,6 +562,9 @@ func (v *Value) Index(i int) *Value {
 //
 //	AsValue("Hello, World!").Contains(AsValue("World")) == true
 func (v *Value) Contains(other *Value) bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).Contains(other)
+	}
 	if v.IsNil() {
 		errors.ThrowTemplateRuntimeError("nil cannot be checked for containment")
 	}
@@ -588,6 +614,9 @@ func (v *Value) Contains(other *Value) bool {
 // CanSlice reports whether the underlying value is of type array, slice or
 // string. You normally would use CanSlice() before using the Slice() operation.
 func (v *Value) CanSlice() bool {
+	if v.undefined {
+		return v.Val.Interface().(Undefined).CanSlice()
+	}
 	if v.IsNil() {
 		return false
 	}
@@ -609,6 +638,10 @@ func (v *Value) CanSlice() bool {
 // If the underlying value has no items or is not one of the types above, the
 // empty function (function's second argument) will be called.
 func (v *Value) Iterate(fn func(idx, count int, key, value *Value) bool, empty func()) {
+	if v.undefined {
+		v.Val.Interface().(Undefined).Iterate(fn, empty)
+		return
+	}
 	v.IterateOrder(fn, empty, false, false, false)
 }
 
@@ -617,6 +650,10 @@ func (v *Value) Iterate(fn func(idx, count int, key, value *Value) bool, empty f
 // because maps don't have any particular order. However, you can force an order
 // using the `sorted` keyword (and even use `reversed sorted`).
 func (v *Value) IterateOrder(fn func(idx, count int, key, value *Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
+	if v.undefined {
+		v.Val.Interface().(Undefined).IterateOrder(fn, empty, reverse, sorted, caseSensitive)
+		return
+	}
 	if v.IsNil() {
 		errors.ThrowTemplateRuntimeError("nil cannot be iterated")
 	}
@@ -852,6 +889,10 @@ func (v *Value) Items() []*Pair {
 
 // XXX: need to work on that
 func (v *Value) Set(key string, value interface{}) {
+	if v.undefined {
+		v.Val.Interface().(Undefined).Set(key, value)
+		return
+	}
 	if v.IsNil() {
 		errors.ThrowTemplateRuntimeError("can't set attribute or item on nil value")
 	}

@@ -46,7 +46,7 @@ func (ctx *Context) Get(name string) *Value {
 	} else if ctx.parent != nil {
 		return ctx.parent.Get(name)
 	} else if ctx.resolver != nil {
-		item := ctx.resolver.GetItem(ctx.userData, name)
+		item := ctx.resolver.Get(ctx.userData, name)
 		// save the item in the context so that we do not have to resolve it
 		// again
 		ctx.data[name] = item

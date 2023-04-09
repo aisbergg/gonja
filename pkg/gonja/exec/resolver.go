@@ -23,9 +23,9 @@ func NewResolver(undefined UndefinedFunc) *Resolver {
 	}
 }
 
-// GetItem returns the value for the given key. If 'value' has no such key, the
+// Get returns the value for the given key. If 'value' has no such key, the
 // undefined value is returned.
-func (r *Resolver) GetItem(value *Value, key any) *Value {
+func (r *Resolver) Get(value *Value, key any) *Value {
 	if log.Enabled {
 		fm := log.FuncMarker()
 		defer fm.End()
@@ -34,13 +34,13 @@ func (r *Resolver) GetItem(value *Value, key any) *Value {
 
 	if value.IsNil() {
 		log.Print("get item '%s' from invalid or nil value -> return undefined", key)
-		return AsValue(r.undefinedFunc(fmt.Sprintf("%s", key), ""))
+		return toUndefinedValue(r.undefinedFunc(fmt.Sprintf("%s", key), ""))
 	}
 
 	val := value.Val
 	typ := value.Val.Type()
 	if typ.Implements(undefinedType) {
-		return AsValue(value.Val.Interface().(Undefined).GetItem(key))
+		return AsValue(value.Val.Interface().(Undefined).Get(key))
 	}
 
 	var resVal reflect.Value
@@ -50,14 +50,14 @@ func (r *Resolver) GetItem(value *Value, key any) *Value {
 		case reflect.String, reflect.Array, reflect.Slice:
 			if index >= val.Len() {
 				log.Print("index '%v' out of range -> return undefined", index)
-				return AsValue(r.undefinedFunc(strconv.Itoa(index), "%s has no element %d", val.Kind().String(), index))
+				return toUndefinedValue(r.undefinedFunc(strconv.Itoa(index), "%s has no element %d", val.Kind().String(), index))
 			}
 			if index < 0 {
 				index = val.Len() + index
 			}
 			if index < 0 {
 				log.Print("index '%v' out of range -> return undefined", index)
-				return AsValue(r.undefinedFunc(strconv.Itoa(index), "%s has no element %d", val.Kind().String(), index))
+				return toUndefinedValue(r.undefinedFunc(strconv.Itoa(index), "%s has no element %d", val.Kind().String(), index))
 			}
 			resVal = val.Index(index)
 
@@ -65,7 +65,7 @@ func (r *Resolver) GetItem(value *Value, key any) *Value {
 			resVal = val.MapIndex(reflect.ValueOf(index))
 			if !resVal.IsValid() {
 				log.Print("map has no key '%v' -> return undefined", index)
-				return AsValue(r.undefinedFunc(fmt.Sprintf("%s", key), ""))
+				return toUndefinedValue(r.undefinedFunc(fmt.Sprintf("%s", key), ""))
 			}
 
 		default:
@@ -85,7 +85,7 @@ func (r *Resolver) GetItem(value *Value, key any) *Value {
 			resVal = val.MapIndex(reflect.ValueOf(name))
 			if !resVal.IsValid() {
 				log.Print("map has no key '%s' -> return undefined", name)
-				return AsValue(r.undefinedFunc(name, ""))
+				return toUndefinedValue(r.undefinedFunc(name, ""))
 			}
 
 		case reflect.Struct:
@@ -101,13 +101,13 @@ func (r *Resolver) GetItem(value *Value, key any) *Value {
 			fld, ok := structFlds[name]
 			if !ok {
 				log.Print("struct has no field '%s' -> return undefined", name)
-				return AsValue(r.undefinedFunc(name, "struct has no field '%s'", name))
+				return toUndefinedValue(r.undefinedFunc(name, "struct has no field '%s'", name))
 			}
 			resVal = val.Field(fld.Index)
 
 		default:
 			log.Print("cannot get item '%s' from '%s' value -> return undefined", name, val.Kind().String())
-			return AsValue(r.undefinedFunc(name, ""))
+			return toUndefinedValue(r.undefinedFunc(name, ""))
 		}
 
 	} else {
@@ -117,12 +117,12 @@ func (r *Resolver) GetItem(value *Value, key any) *Value {
 			resVal = val.MapIndex(reflect.ValueOf(key))
 			if !resVal.IsValid() {
 				log.Print("map has no key '%v' -> return undefined", key)
-				return AsValue(r.undefinedFunc(fmt.Sprintf("%s", key), ""))
+				return toUndefinedValue(r.undefinedFunc(fmt.Sprintf("%s", key), ""))
 			}
 
 		default:
 			log.Print("get item '%v' from '%s' value -> return undefined", key, val.Kind().String())
-			return AsValue(r.undefinedFunc(fmt.Sprintf("%s", key), ""))
+			return toUndefinedValue(r.undefinedFunc(fmt.Sprintf("%s", key), ""))
 		}
 	}
 

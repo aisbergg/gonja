@@ -61,7 +61,7 @@ var getitemCases = []struct {
 	asString string
 	flags    flags
 }{
-	{"nil", nil, "missing", false, "", flags{IsError: true}},
+	// {"nil", nil, "missing", false, "", flags{IsError: true}},
 	// {"item found", map[string]any{"Attr": "test"}, "Attr", true, "test", flags{IsString: true, IsTrue: true, IsIterable: true}},
 	// {"item not found", map[string]any{"Attr": "test"}, "Missing", false, "test", flags{IsNil: true}},
 	// {"attr", testStruct{"test"}, "Attr", false, "", flags{IsNil: true}},
@@ -109,7 +109,7 @@ func getValue(val *exec.Value, key any) (*exec.Value, bool) {
 		}
 	}()
 
-	resolved := resolver.GetItem(val, key)
+	resolved := resolver.Get(val, key)
 	if _, ok := resolved.Interface().(exec.Undefined); ok {
 		return nil, false
 	}

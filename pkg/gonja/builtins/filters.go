@@ -114,7 +114,7 @@ func filterAttr(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.V
 	log.Print("call filter with evaluated args: default(%s)", p.String())
 
 	attr := p.First().String()
-	value := e.Resolver.GetItem(in, attr)
+	value := e.Resolver.Get(in, attr)
 	return value
 }
 
@@ -427,7 +427,7 @@ func filterGroupBy(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exe
 	groupers := []any{}
 
 	in.Iterate(func(idx, count int, key, value *exec.Value) bool {
-		attr := e.Resolver.GetItem(key, field)
+		attr := e.Resolver.Get(key, field)
 		if !attr.IsDefined() {
 			return true
 		}
@@ -618,7 +618,7 @@ func filterMap(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Va
 	in.Iterate(func(idx, count int, key, value *exec.Value) bool {
 		val := key
 		if len(attribute) > 0 {
-			attr := e.Resolver.GetItem(val, attribute)
+			attr := e.Resolver.Get(val, attribute)
 			if attr.IsDefined() {
 				val = attr
 			} else if defaultVal != nil {
@@ -658,7 +658,7 @@ func filterMax(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Va
 	in.Iterate(func(idx, count int, key, value *exec.Value) bool {
 		val := key
 		if len(attribute) > 0 {
-			attr := e.Resolver.GetItem(val, attribute)
+			attr := e.Resolver.Get(val, attribute)
 			if attr.IsDefined() {
 				val = attr
 			} else {
@@ -718,7 +718,7 @@ func filterMin(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Va
 	in.Iterate(func(idx, count int, key, value *exec.Value) bool {
 		val := key
 		if len(attribute) > 0 {
-			attr := e.Resolver.GetItem(val, attribute)
+			attr := e.Resolver.Get(val, attribute)
 			if attr.IsDefined() {
 				val = attr
 			} else {
@@ -843,7 +843,7 @@ func filterRejectAttr(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *
 	if len(params.Args) == 1 {
 		// Reject truthy value
 		test = func(in *exec.Value) *exec.Value {
-			attr := e.Resolver.GetItem(in, attribute)
+			attr := e.Resolver.Get(in, attribute)
 			if !attr.IsDefined() {
 				errors.ThrowFilterArgumentError("rejectattr(*args, **kwargs)", "'%s' has no attribute '%s'", in.String(), attribute)
 			}
@@ -856,7 +856,7 @@ func filterRejectAttr(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *
 			Kwargs: params.Kwargs,
 		}
 		test = func(in *exec.Value) *exec.Value {
-			attr := e.Resolver.GetItem(in, attribute)
+			attr := e.Resolver.Get(in, attribute)
 			if !attr.IsDefined() {
 				errors.ThrowFilterArgumentError("rejectattr(*args, **kwargs)", "'%s' has no attribute '%s'", in.String(), attribute)
 			}
@@ -1030,7 +1030,7 @@ func filterSelectAttr(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *
 	if len(params.Args) == 1 {
 		// Reject truthy value
 		test = func(in *exec.Value) *exec.Value {
-			attr := e.Resolver.GetItem(in, attribute)
+			attr := e.Resolver.Get(in, attribute)
 			if !attr.IsDefined() {
 				errors.ThrowFilterArgumentError("selectattr(*args, **kwargs)", "'%s' has no attribute '%s'", in.String(), attribute)
 			}
@@ -1043,7 +1043,7 @@ func filterSelectAttr(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *
 			Kwargs: params.Kwargs,
 		}
 		test = func(in *exec.Value) *exec.Value {
-			attr := e.Resolver.GetItem(in, attribute)
+			attr := e.Resolver.Get(in, attribute)
 			if !attr.IsDefined() {
 				errors.ThrowFilterArgumentError("selectattr(*args, **kwargs)", "'%s' has no attribute '%s'", in.String(), attribute)
 			}
@@ -1178,7 +1178,7 @@ func filterSum(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Va
 		if attribute.IsString() {
 			val := key
 			for _, attr := range strings.Split(attribute.String(), ".") {
-				val = e.Resolver.GetItem(val, attr)
+				val = e.Resolver.Get(val, attr)
 				if !val.IsDefined() {
 					errors.ThrowFilterArgumentError("sum(attribute=nil, start=0)", "'%s' has no attribute '%s'", key.String(), attribute.String())
 				}
@@ -1187,7 +1187,7 @@ func filterSum(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Va
 				sum += val.Float()
 			}
 		} else if attribute.IsInteger() {
-			value := e.Resolver.GetItem(key, attribute.Integer())
+			value := e.Resolver.Get(key, attribute.Integer())
 			if value.IsDefined() {
 				sum += value.Float()
 			}
@@ -1333,7 +1333,7 @@ func filterUnique(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec
 		val := key
 		if attribute.IsString() {
 			attr := attribute.String()
-			nested := e.Resolver.GetItem(key, attr)
+			nested := e.Resolver.Get(key, attr)
 			if !nested.IsDefined() {
 				errors.ThrowFilterArgumentError("unique(case_sensitive=false, attribute=nil)", "'%s' has no attribute '%s'", key.String(), attr)
 			}

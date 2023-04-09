@@ -87,8 +87,7 @@ func (e *Evaluator) Eval(node parse.Expression) *Value {
 	case *parse.GetItemNode:
 		return e.evalGetItem(n)
 	case *parse.NegationNode:
-		result := e.Eval(n.Term)
-		return result.Negate()
+		return AsValue(!e.Eval(n.Term).IsTrue())
 	case *parse.BinaryExpressionNode:
 		return e.evalBinaryExpression(n)
 	case *parse.UnaryExpressionNode:
@@ -281,11 +280,11 @@ func (e *Evaluator) evalGetItem(node *parse.GetItemNode) *Value {
 	value := e.Eval(node.Node)
 	e.Current = node
 	if node.Arg != "" {
-		item := e.Resolver.GetItem(value, node.Arg)
+		item := e.Resolver.Get(value, node.Arg)
 		e.Current = node
 		return item
 	}
-	item := e.Resolver.GetItem(value, node.Index)
+	item := e.Resolver.Get(value, node.Index)
 	e.Current = node
 	return item
 }
@@ -432,5 +431,5 @@ func (e *Evaluator) evalParams(node *parse.CallNode, fn *Value) []reflect.Value 
 
 // GetItem returns the item of the given index or key.
 func (e *Evaluator) GetItem(value, key *Value) *Value {
-	return e.Resolver.GetItem(value, key)
+	return e.Resolver.Get(value, key)
 }
