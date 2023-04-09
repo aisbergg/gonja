@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	gonja "github.com/aisbergg/gonja/pkg/gonja"
-	"github.com/aisbergg/gonja/pkg/gonja/config"
 	"github.com/pmezard/go-difflib/difflib"
 
 	tu "github.com/aisbergg/gonja/pkg/gonja/testutils"
@@ -38,11 +37,12 @@ func TestWhiteSpace(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			cfg := config.NewConfig()
-			env := gonja.NewEnvironment(cfg, gonja.DefaultLoader)
-			env.TrimBlocks = test.trimBlocks
-			env.LstripBlocks = test.lstripBlocks
-			env.KeepTrailingNewline = test.keepTrailingNewline
+			env := gonja.NewEnvironment(
+				gonja.DefaultLoader,
+				gonja.TrimBlocks(),
+				gonja.LstripBlocks(),
+				gonja.KeepTrailingNewline(),
+			)
 
 			tpl, err := env.FromFile(source)
 			if err != nil {

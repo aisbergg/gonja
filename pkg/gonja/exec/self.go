@@ -3,12 +3,12 @@ package exec
 import (
 	"strings"
 
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
-func getBlocks(tpl *nodes.Template) map[string]*nodes.Wrapper {
+func getBlocks(tpl *parse.TemplateNode) map[string]*parse.WrapperNode {
 	if tpl == nil {
-		return map[string]*nodes.Wrapper{}
+		return map[string]*parse.WrapperNode{}
 	}
 	blocks := getBlocks(tpl.Parent)
 	for name, wrapper := range tpl.Blocks {

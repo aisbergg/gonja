@@ -3,19 +3,17 @@ package statements
 import (
 	"fmt"
 
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
-	"github.com/pkg/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type TemplateTagStmt struct {
-	Location *tokens.Token
+	Location *parse.Token
 	content  string
 }
 
-func (stmt *TemplateTagStmt) Position() *tokens.Token { return stmt.Location }
+func (stmt *TemplateTagStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *TemplateTagStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("TemplateTagStmt(Line=%d Col=%d)", t.Line, t.Col)
@@ -32,31 +30,28 @@ var templateTagMapping = map[string]string{
 	"closecomment":  "#}",
 }
 
-func (stmt *TemplateTagStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
-	if _, err := r.WriteString(stmt.content); err != nil {
-		return errors.Wrap(err, `Unable to execute 'templatetag' statement`)
-	}
-	return nil
+func (stmt *TemplateTagStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.WriteString(stmt.content)
 }
 
-func templateTagParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func templateTagParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &TemplateTagStmt{}
 
-	if argToken := args.Match(tokens.Name); argToken != nil {
+	if argToken := args.Match(parse.TokenName); argToken != nil {
 		output, found := templateTagMapping[argToken.Val]
 		if !found {
-			return nil, args.Error("Argument not found", argToken)
+			errors.ThrowSyntaxError(parse.AsErrorToken(argToken), "argument not found")
 		}
 		stmt.content = output
 	} else {
-		return nil, args.Error("Identifier expected.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "identifier expected")
 	}
 
 	if !args.End() {
-		return nil, args.Error("Malformed templatetag-tag argument.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed templatetag-tag argument")
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {

@@ -47,7 +47,11 @@ func testCallable(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool
 }
 
 func testDefined(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	return !(in.IsError() || in.IsNil()), nil
+	// XXX: implement properly
+	if _, ok := in.Interface().(exec.Undefined); ok {
+		return true, nil
+	}
+	return false, nil
 }
 
 func testDivisibleby(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {

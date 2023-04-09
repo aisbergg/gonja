@@ -3,80 +3,72 @@ package statements
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
-
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type WithStmt struct {
-	Location *tokens.Token
-	Pairs    map[string]nodes.Expression
-	Wrapper  *nodes.Wrapper
+	Location *parse.Token
+	Pairs    map[string]parse.Expression
+	Wrapper  *parse.WrapperNode
 }
 
-func (stmt *WithStmt) Position() *tokens.Token { return stmt.Location }
+func (stmt *WithStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *WithStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("WithStmt(Line=%d Col=%d)", t.Line, t.Col)
 }
 
-func (stmt *WithStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
+func (stmt *WithStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
 	sub := r.Inherit()
 
 	for key, value := range stmt.Pairs {
 		val := r.Eval(value)
-		if val.IsError() {
-			return errors.Wrapf(val, `unable to evaluate parameter %s`, value)
-		}
 		sub.Ctx.Set(key, val)
 	}
 
-	return sub.ExecuteWrapper(stmt.Wrapper)
+	if err := sub.ExecuteWrapper(stmt.Wrapper); err != nil {
+		// pass error up the stack
+		panic(err)
+	}
 }
 
-func withParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func withParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &WithStmt{
 		Location: p.Current(),
-		Pairs:    map[string]nodes.Expression{},
+		Pairs:    map[string]parse.Expression{},
 	}
 
-	wrapper, endargs, err := p.WrapUntil("endwith")
-	if err != nil {
-		return nil, err
-	}
+	wrapper, endargs := p.WrapUntil("endwith")
 	stmt.Wrapper = wrapper
 
 	if !endargs.End() {
-		return nil, endargs.Error("Arguments not allowed here.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(endargs.Current()), "arguments not allowed here")
 	}
 
 	for !args.End() {
-		key := args.Match(tokens.Name)
+		key := args.Match(parse.TokenName)
 		if key == nil {
-			return nil, args.Error("Expected an identifier", args.Current())
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected an identifier")
 		}
-		if args.Match(tokens.Assign) == nil {
-			return nil, args.Error("Expected '='.", args.Current())
+		if args.Match(parse.TokenAssign) == nil {
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unexpected '%s', expected '='", args.Current().Val)
 		}
-		value, err := args.ParseExpression()
-		if err != nil {
-			return nil, err
-		}
+		value := args.ParseExpression()
 		stmt.Pairs[key.Val] = value
 
-		if args.Match(tokens.Comma) == nil {
+		if args.Match(parse.TokenComma) == nil {
 			break
 		}
 	}
 
 	if !args.End() {
-		return nil, errors.New("")
+		return nil
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {

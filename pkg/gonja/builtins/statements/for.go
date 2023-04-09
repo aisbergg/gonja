@@ -4,46 +4,45 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type ForStmt struct {
-	key             string
-	value           string // only for maps: for key, value in map
-	objectEvaluator nodes.Expression
-	ifCondition     nodes.Expression
+	key string
+	// value is only used for maps: for key, value in map
+	value           string
+	objectEvaluator parse.Expression
+	ifCondition     parse.Expression
 
-	bodyWrapper  *nodes.Wrapper
-	emptyWrapper *nodes.Wrapper
+	bodyWrapper  *parse.WrapperNode
+	emptyWrapper *parse.WrapperNode
 }
 
-func (stmt *ForStmt) Position() *tokens.Token { return stmt.bodyWrapper.Position() }
+func (stmt *ForStmt) Position() *parse.Token { return stmt.bodyWrapper.Position() }
 func (stmt *ForStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("ForStmt(Line=%d Col=%d)", t.Line, t.Col)
 }
 
-//nolint:structcheck,unused
 type LoopInfos struct {
-	index      int
-	index0     int
-	revindex   int
-	revindex0  int
-	first      bool
-	last       bool
-	length     int
-	depth      int
-	depth0     int
-	PrevItem   *exec.Value
-	NextItem   *exec.Value
+	Index      int         `gonja:"index"`
+	Index0     int         `gonja:"index0"`
+	RevIndex   int         `gonja:"revindex"`
+	RevIndex0  int         `gonja:"revindex0"`
+	First      bool        `gonja:"first"`
+	Last       bool        `gonja:"last"`
+	Length     int         `gonja:"length"`
+	Depth      int         `gonja:"depth"`
+	Depth0     int         `gonja:"depth0"`
+	PrevItem   *exec.Value `gonja:"previtem"`
+	NextItem   *exec.Value `gonja:"nextitem"`
 	_lastValue *exec.Value
 }
 
 func (li *LoopInfos) Cycle(va *exec.VarArgs) *exec.Value {
-	return va.Args[int(math.Mod(float64(li.index0), float64(len(va.Args))))]
+	return va.Args[int(math.Mod(float64(li.Index0), float64(len(va.Args))))]
 }
 
 func (li *LoopInfos) Changed(value *exec.Value) bool {
@@ -52,11 +51,9 @@ func (li *LoopInfos) Changed(value *exec.Value) bool {
 	return !same
 }
 
-func (stmt *ForStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) (forError error) {
+func (stmt *ForStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
 	obj := r.Eval(stmt.objectEvaluator)
-	if obj.IsError() {
-		return obj
-	}
 
 	// Create loop struct
 	items := exec.NewDict()
@@ -103,7 +100,8 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) (forEr
 			sub := r.Inherit()
 			err := sub.ExecuteWrapper(stmt.emptyWrapper)
 			if err != nil {
-				forError = err
+				// pass error up the execution stack
+				panic(err)
 			}
 		}
 	})
@@ -111,8 +109,8 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) (forEr
 	// 2nd pass: all values are defined, render
 	length := len(items.Pairs)
 	loop := &LoopInfos{
-		first:  true,
-		index0: -1,
+		First:  true,
+		Index0: -1,
 	}
 	for idx, pair := range items.Pairs {
 		r.EndTag(tag.Trim)
@@ -125,16 +123,16 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) (forEr
 		}
 
 		ctx.Set("loop", loop)
-		loop.index0 = idx
-		loop.index = loop.index0 + 1
+		loop.Index0 = idx
+		loop.Index = loop.Index0 + 1
 		if idx == 1 {
-			loop.first = false
+			loop.First = false
 		}
 		if idx+1 == length {
-			loop.last = true
+			loop.Last = true
 		}
-		loop.revindex = length - idx
-		loop.revindex0 = length - (idx + 1)
+		loop.RevIndex = length - idx
+		loop.RevIndex0 = length - (idx + 1)
 
 		if idx == 0 {
 			loop.PrevItem = exec.AsValue(nil)
@@ -161,39 +159,35 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) (forEr
 		// Render elements with updated context
 		err := sub.ExecuteWrapper(stmt.bodyWrapper)
 		if err != nil {
-			return err
+			// pass error up the execution stack
+			panic(err)
 		}
 	}
-
-	return forError
 }
 
-func forParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func forParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &ForStmt{}
 
 	// Arguments parsing
-	var valueToken *tokens.Token
-	keyToken := args.Match(tokens.Name)
+	var valueToken *parse.Token
+	keyToken := args.Match(parse.TokenName)
 	if keyToken == nil {
-		return nil, args.Error("Expected an key identifier as first argument for 'for'-tag", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "expected an key identifier as first argument for 'for'-tag")
 	}
 
-	if args.Match(tokens.Comma) != nil {
+	if args.Match(parse.TokenComma) != nil {
 		// Value name is provided
-		valueToken = args.Match(tokens.Name)
+		valueToken = args.Match(parse.TokenName)
 		if valueToken == nil {
-			return nil, args.Error("Value name must be an identifier.", nil)
+			errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "value name must be an identifier")
 		}
 	}
 
 	if args.MatchName("in") == nil {
-		return nil, args.Error("Expected keyword 'in'.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "expected keyword 'in' after key name")
 	}
 
-	objectEvaluator, err := args.ParseExpression()
-	if err != nil {
-		return nil, err
-	}
+	objectEvaluator := args.ParseExpression()
 	stmt.objectEvaluator = objectEvaluator
 	stmt.key = keyToken.Val
 	if valueToken != nil {
@@ -201,42 +195,33 @@ func forParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
 	}
 
 	if args.MatchName("if") != nil {
-		var ifCondition, err = args.ParseExpression()
-		if err != nil {
-			return nil, err
-		}
+		var ifCondition = args.ParseExpression()
 		stmt.ifCondition = ifCondition
 	}
 
 	if !args.End() {
-		return nil, args.Error("Malformed for-loop args.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "malformed for-loop args")
 	}
 
 	// Body wrapping
-	wrapper, endargs, err := p.WrapUntil("else", "endfor")
-	if err != nil {
-		return nil, err
-	}
+	wrapper, endargs := p.WrapUntil("else", "endfor")
 	stmt.bodyWrapper = wrapper
 
 	if !endargs.End() {
-		return nil, endargs.Error("Arguments not allowed here.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "arguments not allowed here")
 	}
 
 	if wrapper.EndTag == "else" {
 		// if there's an else in the if-statement, we need the else-Block as well
-		wrapper, endargs, err = p.WrapUntil("endfor")
-		if err != nil {
-			return nil, err
-		}
+		wrapper, endargs = p.WrapUntil("endfor")
 		stmt.emptyWrapper = wrapper
 
 		if !endargs.End() {
-			return nil, endargs.Error("Arguments not allowed here.", nil)
+			errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "arguments not allowed here")
 		}
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {

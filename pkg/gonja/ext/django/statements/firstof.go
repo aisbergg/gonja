@@ -1,59 +1,46 @@
 package statements
 
 import (
-	// "github.com/aisbergg/gonja/pkg/gonja/exec"
 	"fmt"
 
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
-	"github.com/pkg/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type FirstofStmt struct {
-	Location *tokens.Token
-	Args     []nodes.Expression
+	Location *parse.Token
+	Args     []parse.Expression
 }
 
-func (stmt *FirstofStmt) Position() *tokens.Token { return stmt.Location }
+func (stmt *FirstofStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *FirstofStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("FirstofStmt(Args=%s, Line=%d Col=%d)", stmt.Args, t.Line, t.Col)
 }
 
-func (stmt *FirstofStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
+func (stmt *FirstofStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
 	for _, arg := range stmt.Args {
 		val := r.Eval(arg)
-		if val.IsError() {
-			return val
-		}
 
 		if val.IsTrue() {
-			if err := r.RenderValue(val); err != nil {
-				return errors.Wrap(err, `Unable to execute 'firstof' statement`)
-			}
-			return nil
+			r.RenderValue(val)
+			return
 		}
 	}
-
-	return nil
 }
 
-func firstofParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func firstofParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &FirstofStmt{
 		Location: p.Current(),
 	}
 
 	for !args.End() {
-		node, err := args.ParseExpression()
-		if err != nil {
-			return nil, err
-		}
+		node := args.ParseExpression()
 		stmt.Args = append(stmt.Args, node)
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {

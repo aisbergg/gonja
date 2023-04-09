@@ -3,34 +3,27 @@ package statements
 import (
 	"fmt"
 
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type CommentStmt struct {
-	Location *tokens.Token
+	Location *parse.Token
 }
 
-func (stmt *CommentStmt) Position() *tokens.Token { return stmt.Location }
+func (stmt *CommentStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *CommentStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("Block(Line=%d Col=%d)", t.Line, t.Col)
 }
 
-func commentParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func commentParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	commentNode := &CommentStmt{p.Current()}
-
-	err := p.SkipUntil("endcomment")
-	if err != nil {
-		return nil, err
-	}
-
+	p.SkipUntil("endcomment")
 	if !args.End() {
-		return nil, args.Error("Tag 'comment' does not take any argument.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "tag 'comment' does not take any argument.")
 	}
-
-	return commentNode, nil
+	return commentNode
 }
 
 func init() {

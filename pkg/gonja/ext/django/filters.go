@@ -10,8 +10,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 
+	log "github.com/aisbergg/gonja/internal/log/exec"
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 	u "github.com/aisbergg/gonja/pkg/gonja/utils"
 )
@@ -364,7 +366,7 @@ func filterFloatformat(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) 
 	}
 
 	// if the argument is not a number (e. g. empty), the default
-	// behaviour is trim the result
+	// behavior is trim the result
 	trim := !param.IsNumber()
 
 	if decimals <= 0 {
@@ -385,20 +387,30 @@ func filterFloatformat(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) 
 }
 
 func filterGetdigit(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if len(params.Args) > 1 {
-		return exec.AsValue(errors.New("'getdigit' filter expect one and only one argument"))
-		// return nil, &Error{
-		// 	Sender:    "filter:getdigit",
-		// 	OrigError: errors.New("'getdigit' filter expect one and only one argument"),
-		// }
+	if log.Enabled {
+		fm := log.FuncMarker()
+		defer fm.End()
 	}
-	param := params.First()
-	i := param.Integer()
-	l := len(in.String()) // do NOT use in.Len() here!
+	log.Print("call filter with raw args: get_digit(%s)", params.String())
+	p := params.ExpectKwArgs([]*exec.Kwarg{
+		{"digit", nil},
+	})
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("get_digit(digit=0)", p.Error())
+	}
+	log.Print("call filter with evaluated args: get_digit(%s)", p.String())
+
+	if !in.IsNumber() {
+		errors.ThrowFilterArgumentError("get_digit(digit=0)", "get_digit(digit=0) requires a number as input")
+	}
+	i := p.GetKwarg("digit", nil).Integer()
+	s := in.String()
+	l := len(s)
 	if i <= 0 || i > l {
 		return in
 	}
-	return exec.AsValue(in.String()[l-i] - 48)
+	n, _ := strconv.Atoi(s[i : i+1])
+	return exec.AsValue(n)
 }
 
 func filterIriencode(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
@@ -426,7 +438,7 @@ func filterCapfirst(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *ex
 func filterDate(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
 	t, isTime := in.Interface().(time.Time)
 	if !isTime {
-		return exec.AsValue(errors.New("filter input argument must be of type 'time.Time'"))
+		return exec.AsValue(pkgerrors.New("filter input argument must be of type 'time.Time'"))
 		// return nil, &Error{
 		// 	Sender:    "filter:date",
 		// 	OrigError: errors.New("filter input argument must be of type 'time.Time'"),
@@ -533,7 +545,7 @@ func filterPluralize(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *e
 		if param.Len() > 0 {
 			endings := strings.Split(param.String(), ",")
 			if len(endings) > 2 {
-				return exec.AsValue(errors.New("you cannot pass more than 2 arguments to filter 'pluralize'"))
+				return exec.AsValue(pkgerrors.New("you cannot pass more than 2 arguments to filter 'pluralize'"))
 				// return nil, &Error{
 				// 	Sender:    "filter:pluralize",
 				// 	OrigError: errors.New("you cannot pass more than 2 arguments to filter 'pluralize'"),
@@ -564,7 +576,7 @@ func filterPluralize(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *e
 	// 	Sender:    "filter:pluralize",
 	// 	OrigError: errors.New("filter 'pluralize' does only work on numbers"),
 	// }
-	return exec.AsValue(errors.New("filter 'pluralize' does only work on numbers"))
+	return exec.AsValue(pkgerrors.New("filter 'pluralize' does only work on numbers"))
 }
 
 func filterRemovetags(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
@@ -590,7 +602,7 @@ func filterYesno(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.
 		// 	Sender:    "filter:getdigit",
 		// 	OrigError: errors.New("'getdigit' filter expect one and only one argument"),
 		// }
-		return exec.AsValue(errors.New("'getdigit' filter expect one and only one argument"))
+		return exec.AsValue(pkgerrors.New("'getdigit' filter expect one and only one argument"))
 	}
 	choices := map[int]string{
 		0: "yes",
@@ -602,7 +614,7 @@ func filterYesno(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.
 	customChoices := strings.Split(paramString, ",")
 	if len(paramString) > 0 {
 		if len(customChoices) > 3 {
-			return exec.AsValue(errors.Errorf("You cannot pass more than 3 options to the 'yesno'-filter (got: '%s').", paramString))
+			return exec.AsValue(pkgerrors.Errorf("You cannot pass more than 3 options to the 'yesno'-filter (got: '%s').", paramString))
 			// return nil, &Error{
 			// 	Sender:    "filter:yesno",
 			// 	OrigError: errors.Errorf("You cannot pass more than 3 options to the 'yesno'-filter (got: '%s').", paramString),
@@ -613,7 +625,7 @@ func filterYesno(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.
 			// 	Sender:    "filter:yesno",
 			// 	OrigError: errors.Errorf("You must pass either no or at least 2 arguments to the 'yesno'-filter (got: '%s').", paramString),
 			// }
-			return exec.AsValue(errors.Errorf("You must pass either no or at least 2 arguments to the 'yesno'-filter (got: '%s').", paramString))
+			return exec.AsValue(pkgerrors.Errorf("You must pass either no or at least 2 arguments to the 'yesno'-filter (got: '%s').", paramString))
 		}
 
 		// Map to the options now

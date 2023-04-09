@@ -3,50 +3,45 @@ package statements
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
-
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
+// IncludeStmt is a statement that includes another template.
 type IncludeStmt struct {
-	// tpl               *Template
-	Location      *tokens.Token
+	Location      *parse.Token
 	Filename      string
-	FilenameExpr  nodes.Expression
-	Template      *nodes.Template
+	FilenameExpr  parse.Expression
+	Template      *parse.TemplateNode
 	IgnoreMissing bool
 	WithContext   bool
 	IsEmpty       bool
 }
 
-func (stmt *IncludeStmt) Position() *tokens.Token { return stmt.Location }
+// Position returns the token position of the statement.
+func (stmt *IncludeStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *IncludeStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("IncludeStmt(Filename=%s Line=%d Col=%d)", stmt.Filename, t.Line, t.Col)
 }
 
-func (stmt *IncludeStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
+// Execute executes the include statement.
+func (stmt *IncludeStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
 	if stmt.IsEmpty {
-		return nil
+		return
 	}
 	sub := r.Inherit()
 
 	if stmt.FilenameExpr != nil {
-		filenameValue := r.Eval(stmt.FilenameExpr)
-		if filenameValue.IsError() {
-			return errors.Wrap(filenameValue, `Unable to evaluate filename`)
-		}
-
-		filename := filenameValue.String()
+		filename := r.Eval(stmt.FilenameExpr).String()
 		included, err := r.Loader.GetTemplate(filename)
 		if err != nil {
 			if stmt.IgnoreMissing {
-				return nil
+				return
 			}
-			return errors.Wrapf(err, `Unable to load template '%s'`, filename)
+			errors.ThrowTemplateRuntimeError("unable to load template '%s': %s", filename, err)
 		}
 		sub.Template = included
 		sub.Root = included.Root
@@ -55,7 +50,10 @@ func (stmt *IncludeStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) er
 		sub.Root = stmt.Template
 	}
 
-	return sub.Execute()
+	if err := sub.Execute(); err != nil {
+		// pass error up the stack
+		panic(err)
+	}
 }
 
 type IncludeEmptyStmt struct{}
@@ -64,18 +62,15 @@ type IncludeEmptyStmt struct{}
 // 	return nil
 // }
 
-func includeParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func includeParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &IncludeStmt{
 		Location: p.Current(),
 	}
 
-	if tok := args.Match(tokens.String); tok != nil {
+	if tok := args.Match(parse.TokenString); tok != nil {
 		stmt.Filename = tok.Val
 	} else {
-		filename, err := args.ParseExpression()
-		if err != nil {
-			return nil, err
-		}
+		filename := args.ParseExpression()
 		stmt.FilenameExpr = filename
 	}
 
@@ -102,7 +97,7 @@ func includeParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, erro
 			if stmt.IgnoreMissing {
 				stmt.IsEmpty = true
 			} else {
-				return nil, errors.Wrapf(err, `Unable to parse included template '%s'`, stmt.Filename)
+				errors.ThrowSyntaxError(parse.AsErrorToken(stmt.Location), "unable to parse included template '%s'", stmt.Filename)
 			}
 		} else {
 			stmt.Template = tpl
@@ -110,10 +105,10 @@ func includeParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, erro
 	}
 
 	if !args.End() {
-		return nil, args.Error("Malformed 'include'-tag args.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed 'include'-tag args.")
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {

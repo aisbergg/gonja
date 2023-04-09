@@ -1,120 +1,136 @@
 package exec
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 	"strings"
+	"sync"
 
-	"github.com/pkg/errors"
-
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 var (
-	typeOfValuePtr = reflect.TypeOf(new(Value))
-	// typeOfExecCtxPtr = reflect.TypeOf(new(Context))
+	rtListOfAny = reflect.TypeOf([]any{})
+	rtError     = reflect.TypeOf((*error)(nil)).Elem()
+
+	evaluatorPool = sync.Pool{
+		New: func() interface{} {
+			return &Evaluator{}
+		},
+	}
 )
 
 type Evaluator struct {
 	*EvalConfig
-	Ctx *Context
+	Ctx      *Context
+	Resolver *Resolver
+	Current  parse.Node
 }
 
 func (r *Renderer) Evaluator() *Evaluator {
-	return &Evaluator{
-		EvalConfig: r.EvalConfig,
-		Ctx:        r.Ctx,
-	}
+	e := evaluatorPool.Get().(*Evaluator)
+	e.EvalConfig = r.EvalConfig
+	e.Ctx = r.Ctx
+	e.Resolver = r.Resolver
+	return e
 }
 
-func (r *Renderer) Eval(node nodes.Expression) *Value {
+func (r *Renderer) Eval(node parse.Expression) *Value {
 	e := r.Evaluator()
+	defer func() {
+		e.EvalConfig = nil
+		e.Ctx = nil
+		e.Current = nil
+		e.Resolver = nil
+		evaluatorPool.Put(e)
+	}()
+	// enrich runtime errors with token position
+	defer func() {
+		if r := recover(); r != nil {
+			if rerr, ok := r.(errors.TemplateRuntimeError); ok {
+				rerr.Enrich(parse.AsErrorToken(e.Current.Position()))
+				panic(rerr)
+			} else {
+				panic(r)
+			}
+		}
+	}()
+
 	return e.Eval(node)
 }
 
-func (e *Evaluator) Eval(node nodes.Expression) *Value {
+func (e *Evaluator) Eval(node parse.Expression) *Value {
+	e.Current = node
 	switch n := node.(type) {
-	case *nodes.String:
+	case *parse.StringNode:
 		return AsValue(n.Val)
-	case *nodes.Integer:
+	case *parse.IntegerNode:
 		return AsValue(n.Val)
-	case *nodes.Float:
+	case *parse.FloatNode:
 		return AsValue(n.Val)
-	case *nodes.Bool:
+	case *parse.BoolNode:
 		return AsValue(n.Val)
-	case *nodes.List:
+	case *parse.ListNode:
 		return e.evalList(n)
-	case *nodes.Tuple:
+	case *parse.TupleNode:
 		return e.evalTuple(n)
-	case *nodes.Dict:
+	case *parse.DictNode:
 		return e.evalDict(n)
-	case *nodes.Pair:
+	case *parse.PairNode:
 		return e.evalPair(n)
-	case *nodes.Name:
+	case *parse.NameNode:
 		return e.evalName(n)
-	case *nodes.Call:
+	case *parse.CallNode:
 		return e.evalCall(n)
-	case *nodes.Getitem:
-		return e.evalGetitem(n)
-	case *nodes.Getattr:
-		return e.evalGetattr(n)
-	case *nodes.Negation:
+	case *parse.GetItemNode:
+		return e.evalGetItem(n)
+	case *parse.NegationNode:
 		result := e.Eval(n.Term)
-		if result.IsError() {
-			return result
-		}
 		return result.Negate()
-	case *nodes.BinaryExpression:
+	case *parse.BinaryExpressionNode:
 		return e.evalBinaryExpression(n)
-	case *nodes.UnaryExpression:
+	case *parse.UnaryExpressionNode:
 		return e.evalUnaryExpression(n)
-	case *nodes.FilteredExpression:
+	case *parse.FilteredExpression:
 		return e.EvaluateFiltered(n)
-	case *nodes.TestExpression:
+	case *parse.TestExpression:
 		return e.EvalTest(n)
-	default:
-		return AsValue(errors.Errorf(`Unknown expression type "%T"`, n))
 	}
+
+	panic(fmt.Errorf("BUG: unknown expression type '%T'", node))
 }
 
-func (e *Evaluator) evalBinaryExpression(node *nodes.BinaryExpression) *Value {
+func (e *Evaluator) evalBinaryExpression(node *parse.BinaryExpressionNode) *Value {
 	var (
 		left  *Value
 		right *Value
 	)
 	left = e.Eval(node.Left)
-	if left.IsError() {
-		return AsValue(errors.Wrapf(left, `Unable to evaluate left parameter %s`, node.Left))
-	}
 
-	switch node.Operator.Token.Val {
-	// These operators allow lazy right expression evluation
-	case "and", "or":
-	default:
+	// lazy right expression evaluation for 'and' and 'or' operations
+	if node.Operator.Type != parse.OperatorAnd && node.Operator.Type != parse.OperatorOr {
 		right = e.Eval(node.Right)
-		if right.IsError() {
-			return AsValue(errors.Wrapf(right, `Unable to evaluate right parameter %s`, node.Right))
-		}
 	}
 
-	switch node.Operator.Token.Val {
-	case "+":
+	switch node.Operator.Type {
+	case parse.OperatorAdd:
 		if left.IsList() {
 			if !right.IsList() {
-				return AsValue(errors.Wrapf(right, `Unable to concatenate list to %s`, node.Right))
+				e.Current = node.Left
+				errors.ThrowTemplateRuntimeError("unable to concatenate list to '%s'", node.Right)
 			}
-
-			v := &Value{Val: reflect.ValueOf([]interface{}{})}
-
-			for ix := 0; ix < left.getResolvedValue().Len(); ix++ {
-				v.Val = reflect.Append(v.Val, left.getResolvedValue().Index(ix))
+			leftList := reflect.ValueOf(left.IndVal)
+			rightList := reflect.ValueOf(right.IndVal)
+			newList := reflect.MakeSlice(rtListOfAny, 0, leftList.Len()+rightList.Len())
+			for ix := 0; ix < leftList.Len(); ix++ {
+				newList = reflect.Append(newList, leftList.Index(ix))
 			}
-
-			for ix := 0; ix < right.getResolvedValue().Len(); ix++ {
-				v.Val = reflect.Append(v.Val, right.getResolvedValue().Index(ix))
+			for ix := 0; ix < rightList.Len(); ix++ {
+				newList = reflect.Append(newList, rightList.Index(ix))
 			}
-
-			return v
+			return AsValue(newList.Interface())
 		}
 		if left.IsFloat() || right.IsFloat() {
 			// Result will be a float
@@ -122,14 +138,14 @@ func (e *Evaluator) evalBinaryExpression(node *nodes.BinaryExpression) *Value {
 		}
 		// Result will be an integer
 		return AsValue(left.Integer() + right.Integer())
-	case "-":
+	case parse.OperatorSub:
 		if left.IsFloat() || right.IsFloat() {
 			// Result will be a float
 			return AsValue(left.Float() - right.Float())
 		}
 		// Result will be an integer
 		return AsValue(left.Integer() - right.Integer())
-	case "*":
+	case parse.OperatorMul:
 		if left.IsFloat() || right.IsFloat() {
 			// Result will be float
 			return AsValue(left.Float() * right.Float())
@@ -139,75 +155,66 @@ func (e *Evaluator) evalBinaryExpression(node *nodes.BinaryExpression) *Value {
 		}
 		// Result will be int
 		return AsValue(left.Integer() * right.Integer())
-	case "/":
+	case parse.OperatorDiv:
 		// Float division
 		return AsValue(left.Float() / right.Float())
-	case "//":
+	case parse.OperatorFloordiv:
 		// Int division
 		return AsValue(int(left.Float() / right.Float()))
-	case "%":
+	case parse.OperatorMod:
 		// Result will be int
 		return AsValue(left.Integer() % right.Integer())
-	case "**":
+	case parse.OperatorPower:
 		return AsValue(math.Pow(left.Float(), right.Float()))
-	case "~":
+	case parse.OperatorConcat:
 		return AsValue(strings.Join([]string{left.String(), right.String()}, ""))
-	case "and":
+	case parse.OperatorAnd:
 		if !left.IsTrue() {
 			return AsValue(false)
 		}
 		right = e.Eval(node.Right)
-		if right.IsError() {
-			return AsValue(errors.Wrapf(right, `Unable to evaluate right parameter %s`, node.Right))
-		}
 		return AsValue(right.IsTrue())
-	case "or":
+	case parse.OperatorOr:
 		if left.IsTrue() {
 			return AsValue(true)
 		}
 		right = e.Eval(node.Right)
-		if right.IsError() {
-			return AsValue(errors.Wrapf(right, `Unable to evaluate right parameter %s`, node.Right))
-		}
 		return AsValue(right.IsTrue())
-	case "<=":
+	case parse.OperatorLteq:
 		if left.IsFloat() || right.IsFloat() {
 			return AsValue(left.Float() <= right.Float())
 		}
 		return AsValue(left.Integer() <= right.Integer())
-	case ">=":
+	case parse.OperatorGteq:
 		if left.IsFloat() || right.IsFloat() {
 			return AsValue(left.Float() >= right.Float())
 		}
 		return AsValue(left.Integer() >= right.Integer())
-	case "==":
+	case parse.OperatorEq:
 		return AsValue(left.EqualValueTo(right))
-	case ">":
+	case parse.OperatorGt:
 		if left.IsFloat() || right.IsFloat() {
 			return AsValue(left.Float() > right.Float())
 		}
 		return AsValue(left.Integer() > right.Integer())
-	case "<":
+	case parse.OperatorLt:
 		if left.IsFloat() || right.IsFloat() {
 			return AsValue(left.Float() < right.Float())
 		}
 		return AsValue(left.Integer() < right.Integer())
-	case "!=", "<>":
+	case parse.OperatorNe:
 		return AsValue(!left.EqualValueTo(right))
-	case "in":
+	case parse.OperatorIn:
 		return AsValue(right.Contains(left))
-	case "is":
+	case parse.OperatorIs:
 		return nil
-	default:
-		return AsValue(errors.Errorf(`Unknown operator "%s"`, node.Operator.Token))
 	}
+
+	panic(fmt.Errorf("BUG: unknown operator '%s'", node.Operator.Token))
 }
 
-func (e *Evaluator) evalUnaryExpression(expr *nodes.UnaryExpression) *Value {
+func (e *Evaluator) evalUnaryExpression(expr *parse.UnaryExpressionNode) *Value {
 	result := e.Eval(expr.Term)
-	if result.IsError() {
-		return AsValue(errors.Wrapf(result, `Unable to evaluate term %s`, expr.Term))
-	}
 	if expr.Negative {
 		if result.IsNumber() {
 			switch {
@@ -216,275 +223,214 @@ func (e *Evaluator) evalUnaryExpression(expr *nodes.UnaryExpression) *Value {
 			case result.IsInteger():
 				return AsValue(-1 * result.Integer())
 			default:
-				return AsValue(errors.New("Operation between a number and a non-(float/integer) is not possible"))
+				errors.ThrowTemplateRuntimeError("Operation between a number and a non-(float/integer) is not possible")
 			}
 		} else {
-			return AsValue(errors.Errorf("Negative sign on a non-number expression %s", expr.Position()))
+			errors.ThrowTemplateRuntimeError("negative sign on a non-number expression '%s'", expr.Position())
 		}
 	}
 	return result
 }
 
-func (e *Evaluator) evalList(node *nodes.List) *Value {
+func (e *Evaluator) evalList(node *parse.ListNode) *Value {
 	values := ValuesList{}
 	for _, val := range node.Val {
 		value := e.Eval(val)
 		values = append(values, value)
 	}
+	e.Current = node
 	return AsValue(values)
 }
 
-func (e *Evaluator) evalTuple(node *nodes.Tuple) *Value {
+func (e *Evaluator) evalTuple(node *parse.TupleNode) *Value {
 	values := ValuesList{}
 	for _, val := range node.Val {
 		value := e.Eval(val)
 		values = append(values, value)
 	}
+	e.Current = node
 	return AsValue(values)
 }
 
-func (e *Evaluator) evalDict(node *nodes.Dict) *Value {
+func (e *Evaluator) evalDict(node *parse.DictNode) *Value {
 	pairs := []*Pair{}
 	for _, pair := range node.Pairs {
 		p := e.evalPair(pair)
-		if p.IsError() {
-			return AsValue(errors.Wrapf(p, `Unable to evaluate pair "%s"`, pair))
-		}
 		pairs = append(pairs, p.Interface().(*Pair))
 	}
+	e.Current = node
 	return AsValue(&Dict{pairs})
 }
 
-func (e *Evaluator) evalPair(node *nodes.Pair) *Value {
+func (e *Evaluator) evalPair(node *parse.PairNode) *Value {
 	key := e.Eval(node.Key)
-	if key.IsError() {
-		return AsValue(errors.Wrapf(key, `Unable to evaluate key "%s"`, node.Key))
-	}
+	e.Current = node
 	value := e.Eval(node.Value)
-	if value.IsError() {
-		return AsValue(errors.Wrapf(value, `Unable to evaluate value "%s"`, node.Value))
-	}
+	e.Current = node
 	return AsValue(&Pair{key, value})
 }
 
-func (e *Evaluator) evalName(node *nodes.Name) *Value {
-	val := e.Ctx.Get(node.Name.Val)
-	return ToValue(val)
+func (e *Evaluator) evalName(node *parse.NameNode) *Value {
+	if node.Name.Val == "none" || node.Name.Val == "None" {
+		return AsValue(nil)
+	}
+	return e.Ctx.Get(node.Name.Val)
 }
 
-func (e *Evaluator) evalGetitem(node *nodes.Getitem) *Value {
+func (e *Evaluator) evalGetItem(node *parse.GetItemNode) *Value {
 	value := e.Eval(node.Node)
-	if value.IsError() {
-		return AsValue(errors.Wrapf(value, `Unable to evaluate target %s`, node.Node))
-	}
-
+	e.Current = node
 	if node.Arg != "" {
-		item, found := value.Getitem(node.Arg)
-		if !found {
-			item, found = value.Getattr(node.Arg)
-		}
-		if !found {
-			if item.IsError() {
-				return AsValue(errors.Wrapf(item, `Unable to evaluate %s`, node))
-			}
-			return AsValue(nil)
-			// return AsValue(errors.Errorf(`Unable to evaluate %s: item '%s' not found`, node, node.Arg))
-		}
+		item := e.Resolver.GetItem(value, node.Arg)
+		e.Current = node
 		return item
 	}
-	item, found := value.Getitem(node.Index)
-	if !found {
-		if item.IsError() {
-			return AsValue(errors.Wrapf(item, `Unable to evaluate %s`, node))
-		}
-		return AsValue(nil)
-		// return AsValue(errors.Errorf(`Unable to evaluate %s: item %d not found`, node, node.Index))
-	}
+	item := e.Resolver.GetItem(value, node.Index)
+	e.Current = node
 	return item
 }
 
-func (e *Evaluator) evalGetattr(node *nodes.Getattr) *Value {
-	value := e.Eval(node.Node)
-	if value.IsError() {
-		return AsValue(errors.Wrapf(value, `Unable to evaluate target %s`, node.Node))
-	}
-
-	if node.Attr != "" {
-		attr, found := value.Getattr(node.Attr)
-		if !found {
-			attr, found = value.Getitem(node.Attr)
-		}
-		if !found {
-			if attr.IsError() {
-				return AsValue(errors.Wrapf(attr, `Unable to evaluate %s`, node))
-			}
-			return AsValue(nil)
-			// return AsValue(errors.Errorf(`Unable to evaluate %s: attribute '%s' not found`, node, node.Attr))
-		}
-		return attr
-	}
-	item, found := value.Getitem(node.Index)
-	if !found {
-		if item.IsError() {
-			return AsValue(errors.Wrapf(item, `Unable to evaluate %s`, node))
-		}
-		return AsValue(nil)
-		// return AsValue(errors.Errorf(`Unable to evaluate %s: item %d not found`, node, node.Index))
-	}
-	return item
-}
-
-func (e *Evaluator) evalCall(node *nodes.Call) *Value {
+func (e *Evaluator) evalCall(node *parse.CallNode) *Value {
 	fn := e.Eval(node.Func)
-	if fn.IsError() {
-		return AsValue(errors.Wrapf(fn, `Unable to evaluate function "%s"`, node.Func))
-	}
-
 	if !fn.IsCallable() {
-		return AsValue(errors.Errorf(`%s is not callable`, node.Func))
+		errors.ThrowTemplateRuntimeError("'%s' is not callable", node.Func)
 	}
 
-	// current := reflect.ValueOf(fn) // Get the initial value
-
-	var current reflect.Value
-	var isSafe bool
+	fnType := fn.IndVal.Type()
+	numParamsOut := fnType.NumOut()
+	if !(numParamsOut == 1 || numParamsOut == 2) {
+		errors.ThrowTemplateRuntimeError(
+			"function %s must have one (value) or two (value, error) return parameters, not %d",
+			node.Func,
+			numParamsOut,
+		)
+	} else if numParamsOut == 2 && fnType.Out(1) != rtError {
+		errors.ThrowTemplateRuntimeError(
+			"function %s must have an error as second return parameter, not %s",
+			node.Func,
+			fnType.Out(1),
+		)
+	}
 
 	var params []reflect.Value
-	var err error
-	t := fn.Val.Type()
-
-	if t.NumIn() == 1 && t.In(0) == reflect.TypeOf(&VarArgs{}) {
-		params, err = e.evalVarArgs(node)
+	if fnType.NumIn() == 1 && fnType.In(0) == reflect.TypeOf(&VarArgs{}) {
+		params = e.evalVarArgs(node)
 	} else {
-		params, err = e.evalParams(node, fn)
-	}
-	if err != nil {
-		return AsValue(errors.Wrapf(err, `Unable to evaluate parameters`))
+		params = e.evalParams(node, fn)
 	}
 
 	// Call it and get first return parameter back
-	values := fn.Val.Call(params)
+	values := fn.IndVal.Call(params)
 	rv := values[0]
-	if t.NumOut() == 2 {
+	if numParamsOut == 2 {
 		e := values[1].Interface()
 		if e != nil {
-			err, ok := e.(error)
-			if !ok {
-				return AsValue(errors.Errorf("The second return value is not an error"))
-			}
+			err := e.(error)
 			if err != nil {
-				return AsValue(err)
+				errors.ThrowTemplateRuntimeError(
+					"call of function %s failed: %s",
+					node.Func,
+					err,
+				)
 			}
 		}
 	}
 
-	if rv.Type() != typeOfValuePtr {
-		current = reflect.ValueOf(rv.Interface())
-	} else {
-		// Return the function call value
-		current = rv.Interface().(*Value).Val
-		isSafe = rv.Interface().(*Value).Safe
+	if rv.Type() == rtValue {
+		return rv.Interface().(*Value)
 	}
-
-	if !current.IsValid() {
-		// Value is not valid (e. g. NIL value)
-		return AsValue(nil)
-	}
-
-	return &Value{Val: current, Safe: isSafe}
+	return AsValue(rv.Interface())
 }
 
-func (e *Evaluator) evalVarArgs(node *nodes.Call) ([]reflect.Value, error) {
-	params := &VarArgs{
-		Args:   []*Value{},
-		KwArgs: map[string]*Value{},
-	}
+func (e *Evaluator) evalVarArgs(node *parse.CallNode) []reflect.Value {
+	e.Current = node
+	params := NewVarArgs()
 	for _, param := range node.Args {
 		value := e.Eval(param)
-		if value.IsError() {
-			return nil, value
-		}
 		params.Args = append(params.Args, value)
 	}
 
 	for key, param := range node.Kwargs {
 		value := e.Eval(param)
-		if value.IsError() {
-			return nil, value
-		}
-		params.KwArgs[key] = value
+		params.SetKwarg(key, value)
 	}
-	// va := AsValue(VarArgs{})
-	return []reflect.Value{reflect.ValueOf(params)}, nil
+
+	return []reflect.Value{reflect.ValueOf(params)}
 }
 
-func (e *Evaluator) evalParams(node *nodes.Call, fn *Value) ([]reflect.Value, error) {
+func (e *Evaluator) evalParams(node *parse.CallNode, fn *Value) []reflect.Value {
+	e.Current = node
 	args := node.Args
-	t := fn.Val.Type()
+	fnType := fn.IndVal.Type()
 
-	if len(args) != t.NumIn() && !(len(args) >= t.NumIn()-1 && t.IsVariadic()) {
-		msg := "Function input argument count (%d) of '%s' must be equal to the calling argument count (%d)."
-		return nil, errors.Errorf(msg, t.NumIn(), node.String(), len(args))
+	if len(args) != fnType.NumIn() && !(len(args) >= fnType.NumIn()-1 && fnType.IsVariadic()) {
+		errors.ThrowTemplateRuntimeError(
+			"function input argument count (%d) of '%s' must be equal to the calling argument count (%d)",
+			fnType.NumIn(),
+			node.String(),
+			len(args),
+		)
 	}
 
 	// Output arguments
-	if t.NumOut() != 1 && t.NumOut() != 2 {
-		msg := "'%s' must have exactly 1 or 2 output arguments, the second argument must be of type error"
-		return nil, errors.Errorf(msg, node.String())
+	if fnType.NumOut() != 1 && fnType.NumOut() != 2 {
+		errors.ThrowTemplateRuntimeError(
+			"'%s' must have exactly 1 or 2 output arguments, the second argument must be of type error",
+			node.String(),
+		)
 	}
 
 	// Evaluate all parameters
 	var parameters []reflect.Value
 
-	numArgs := t.NumIn()
-	isVariadic := t.IsVariadic()
-	var fnArg reflect.Type
+	wantNumParams := fnType.NumIn()
+	isVariadic := fnType.IsVariadic()
+	var wantType reflect.Type
 
 	for idx, arg := range args {
-		pv := e.Eval(arg)
-		if pv.IsError() {
-			return nil, pv
+		param := e.Eval(arg)
+
+		if isVariadic && idx >= wantNumParams-1 {
+			wantType = fnType.In(wantNumParams - 1).Elem()
+		} else {
+			wantType = fnType.In(idx)
 		}
 
-		if isVariadic {
-			if idx >= numArgs-1 {
-				fnArg = t.In(numArgs - 1).Elem()
-			} else {
-				fnArg = t.In(idx)
-			}
-		} else {
-			fnArg = t.In(idx)
+		// wants the *Value type
+		if wantType == rtValue {
+			parameters = append(parameters, reflect.ValueOf(param))
+			continue
 		}
 
-		if fnArg != typeOfValuePtr {
-			// Function's argument is not a *gonja.Value, then we have to check whether input argument is of the same type as the function's argument
-			if !isVariadic {
-				if fnArg != reflect.TypeOf(pv.Interface()) && fnArg.Kind() != reflect.Interface {
-					msg := "Function input argument %d of '%s' must be of type %s or *gonja.Value (not %T)."
-					return nil, errors.Errorf(msg, idx, node.String(), fnArg.String(), pv.Interface())
-				}
-				// Function's argument has another type, using the interface-value
-				parameters = append(parameters, reflect.ValueOf(pv.Interface()))
-			} else {
-				if fnArg != reflect.TypeOf(pv.Interface()) && fnArg.Kind() != reflect.Interface {
-					msg := "Function variadic input argument of '%s' must be of type %s or *gonja.Value (not %T)."
-					return nil, errors.Errorf(msg, node.String(), fnArg.String(), pv.Interface())
-				}
-				// Function's argument has another type, using the interface-value
-				parameters = append(parameters, reflect.ValueOf(pv.Interface()))
-			}
-		} else {
-			// Function's argument is a *gonja.Value
-			parameters = append(parameters, reflect.ValueOf(pv))
+		// wants something else
+		paramType := param.Val.Type()
+		if wantType != paramType {
+			errors.ThrowTemplateRuntimeError(
+				"parameter %d of function %s must be of type %s, got %s",
+				idx,
+				node.String(),
+				wantType.String(),
+				paramType.String(),
+			)
+		}
+		parameters = append(parameters, param.Val)
+	}
+
+	// check if any of the values are invalid
+	for idx, param := range parameters {
+		if param.Kind() == reflect.Invalid {
+			errors.ThrowTemplateRuntimeError(
+				"parameter %d of function %s has an invalid value",
+				idx,
+				node.String(),
+			)
 		}
 	}
 
-	// Check if any of the values are invalid
-	for _, p := range parameters {
-		if p.Kind() == reflect.Invalid {
-			return nil, errors.Errorf("Calling a function using an invalid parameter")
-		}
-	}
+	return parameters
+}
 
-	return parameters, nil
+// GetItem returns the item of the given index or key.
+func (e *Evaluator) GetItem(value, key *Value) *Value {
+	return e.Resolver.GetItem(value, key)
 }

@@ -1,26 +1,44 @@
 package exec
 
 import (
+	"fmt"
 	"sort"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
-// VarArgs represents pythonic variadic args/kwargs
-type VarArgs struct {
-	Args   []*Value
-	KwArgs map[string]*Value
+// KVPair represents a key/value pair.
+type KVPair struct {
+	Key   string
+	Value *Value
 }
 
+// VarArgs represents pythonic variadic args/kwargs.
+type VarArgs struct {
+	Args   []*Value
+	Kwargs []KVPair
+}
+
+// NewVarArgs creates a new VarArgs.
 func NewVarArgs() *VarArgs {
 	return &VarArgs{
 		Args:   []*Value{},
-		KwArgs: map[string]*Value{},
+		Kwargs: make([]KVPair, 0),
 	}
 }
 
-// First returns the first argument or nil AsValue
+// String returns a string representation of the variables arguments.
+func (va *VarArgs) String() string {
+	args := []string{}
+	for _, arg := range va.Args {
+		args = append(args, arg.String())
+	}
+	for _, kv := range va.Kwargs {
+		args = append(args, fmt.Sprintf("%s=%s", kv.Key, kv.Value.String()))
+	}
+	return strings.Join(args, ", ")
+}
+
+// First returns the first argument or nil AsValue.
 func (va *VarArgs) First() *Value {
 	if len(va.Args) > 0 {
 		return va.Args[0]
@@ -28,42 +46,82 @@ func (va *VarArgs) First() *Value {
 	return AsValue(nil)
 }
 
-// GetKwarg gets a keyword arguments with fallback on default value
-func (va *VarArgs) GetKwarg(key string, fallback interface{}) *Value {
-	value, ok := va.KwArgs[key]
-	if ok {
-		return value
+// HasKwarg returns true if the keyword argument exists.
+func (va *VarArgs) HasKwarg(key string) bool {
+	for _, kv := range va.Kwargs {
+		if kv.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// GetKwarg gets a keyword arguments with fallback on default value.
+func (va *VarArgs) GetKwarg(key string, fallback any) *Value {
+	for _, kv := range va.Kwargs {
+		if kv.Key == key {
+			return kv.Value
+		}
 	}
 	return AsValue(fallback)
 }
 
-type KwArg struct {
+// SetKwarg sets a keyword argument
+func (va *VarArgs) SetKwarg(key string, value *Value) {
+	for i, kv := range va.Kwargs {
+		if kv.Key == key {
+			va.Kwargs[i].Value = value
+			return
+		}
+	}
+	va.Kwargs = append(va.Kwargs, KVPair{Key: key, Value: value})
+}
+
+// setDefaultKwarg sets a keyword argument if it does not exist.
+func (va *VarArgs) setDefaultKwarg(key string, value any) {
+	for _, kv := range va.Kwargs {
+		if kv.Key == key {
+			return
+		}
+	}
+	va.Kwargs = append(va.Kwargs, KVPair{Key: key, Value: AsValue(value)})
+}
+
+// Kwarg represents a keyword argument.
+type Kwarg struct {
 	Name    string
-	Default interface{}
+	Default any
 }
 
 // Expect validates VarArgs against an expected signature
-func (va *VarArgs) Expect(args int, kwargs []*KwArg) *ReducedVarArgs {
+func (va *VarArgs) Expect(args int, kwargs []*Kwarg) *ReducedVarArgs {
 	rva := &ReducedVarArgs{VarArgs: va}
 	reduced := &VarArgs{
 		Args:   va.Args,
-		KwArgs: map[string]*Value{},
+		Kwargs: make([]KVPair, 0),
 	}
+
+	if args == 0 && len(kwargs) == 0 && (len(va.Args) > 0 || len(va.Kwargs) > 0) {
+		rva.err = fmt.Errorf("expected no arguments, got %d", len(va.Args)+len(va.Kwargs))
+		return rva
+	}
+
+	// set args
 	reduceIdx := -1
 	unexpectedArgs := []string{}
 	if len(va.Args) < args {
 		// Priority on missing arguments
 		if args > 1 {
-			rva.error = errors.Errorf(`Expected %d arguments, got %d`, args, len(va.Args))
+			rva.err = fmt.Errorf("expected %d arguments, got %d", args, len(va.Args))
 		} else {
-			rva.error = errors.Errorf(`Expected an argument, got %d`, len(va.Args))
+			rva.err = fmt.Errorf("expected an argument, got %d", len(va.Args))
 		}
 		return rva
 	} else if len(va.Args) > args {
 		reduced.Args = va.Args[:args]
 		for idx, arg := range va.Args[args:] {
 			if len(kwargs) > idx {
-				reduced.KwArgs[kwargs[idx].Name] = arg
+				reduced.Kwargs = append(reduced.Kwargs, KVPair{Key: kwargs[idx].Name, Value: arg})
 				reduceIdx = idx + 1
 			} else {
 				unexpectedArgs = append(unexpectedArgs, arg.String())
@@ -71,55 +129,46 @@ func (va *VarArgs) Expect(args int, kwargs []*KwArg) *ReducedVarArgs {
 		}
 	}
 
+	// set kwargs
 	unexpectedKwArgs := []string{}
-Loop:
-	for key, value := range va.KwArgs {
-		for idx, kwarg := range kwargs {
-			if key == kwarg.Name {
-				if reduceIdx < 0 || idx >= reduceIdx {
-					reduced.KwArgs[key] = value
-					continue Loop
+outerLoop:
+	for _, inKwarg := range va.Kwargs {
+		for defIdx, defKwarg := range kwargs {
+			if inKwarg.Key == defKwarg.Name {
+				if reduceIdx < 0 || defIdx >= reduceIdx {
+					reduced.Kwargs = append(reduced.Kwargs, inKwarg)
+					continue outerLoop
 				} else {
-					rva.error = errors.Errorf(`Keyword '%s' has been submitted twice`, key)
-					break Loop
+					rva.err = fmt.Errorf("got multiple values for argument '%s'", inKwarg.Key)
+					return rva
 				}
 			}
 		}
-		kv := strings.Join([]string{key, value.String()}, "=")
+		kv := strings.Join([]string{inKwarg.Key, inKwarg.Value.String()}, "=")
 		unexpectedKwArgs = append(unexpectedKwArgs, kv)
 	}
-	sort.Strings(unexpectedKwArgs)
 
-	if rva.error != nil {
+	if len(unexpectedArgs) > 0 {
+		if len(unexpectedArgs) == 1 {
+			rva.err = fmt.Errorf("unexpected argument '%s'", unexpectedArgs[0])
+		} else {
+			rva.err = fmt.Errorf("unexpected arguments '%s'", strings.Join(unexpectedArgs, ", "))
+		}
+	} else if len(unexpectedKwArgs) > 0 {
+		sort.Strings(unexpectedKwArgs)
+		if len(unexpectedKwArgs) == 1 {
+			rva.err = fmt.Errorf("unexpected keyword argument '%s'", unexpectedKwArgs[0])
+		} else {
+			rva.err = fmt.Errorf("unexpected keyword arguments '%s'", strings.Join(unexpectedKwArgs, ", "))
+		}
+	}
+	if rva.err != nil {
 		return rva
 	}
 
-	switch {
-	case len(unexpectedArgs) == 0 && len(unexpectedKwArgs) == 0:
-	case len(unexpectedArgs) == 1 && len(unexpectedKwArgs) == 0:
-		rva.error = errors.Errorf(`Unexpected argument '%s'`, unexpectedArgs[0])
-	case len(unexpectedArgs) > 1 && len(unexpectedKwArgs) == 0:
-		rva.error = errors.Errorf(`Unexpected arguments '%s'`, strings.Join(unexpectedArgs, ", "))
-	case len(unexpectedArgs) == 0 && len(unexpectedKwArgs) == 1:
-		rva.error = errors.Errorf(`Unexpected keyword argument '%s'`, unexpectedKwArgs[0])
-	case len(unexpectedArgs) == 0 && len(unexpectedKwArgs) > 0:
-		rva.error = errors.Errorf(`Unexpected keyword arguments '%s'`, strings.Join(unexpectedKwArgs, ", "))
-	default:
-		rva.error = errors.Errorf(`Unexpected arguments '%s, %s'`,
-			strings.Join(unexpectedArgs, ", "),
-			strings.Join(unexpectedKwArgs, ", "),
-		)
-	}
-
-	if rva.error != nil {
-		return rva
-	}
 	// fill defaults
 	for _, kwarg := range kwargs {
-		_, exists := reduced.KwArgs[kwarg.Name]
-		if !exists {
-			reduced.KwArgs[kwarg.Name] = AsValue(kwarg.Default)
-		}
+		reduced.setDefaultKwarg(kwarg.Name, kwarg.Default)
 	}
 	rva.VarArgs = reduced
 	return rva
@@ -127,7 +176,7 @@ Loop:
 
 // ExpectArgs ensures VarArgs receive only arguments
 func (va *VarArgs) ExpectArgs(args int) *ReducedVarArgs {
-	return va.Expect(args, []*KwArg{})
+	return va.Expect(args, []*Kwarg{})
 }
 
 // ExpectNothing ensures VarArgs does not receive any argument
@@ -135,8 +184,8 @@ func (va *VarArgs) ExpectNothing() *ReducedVarArgs {
 	return va.ExpectArgs(0)
 }
 
-// ExpectKwArgs allow to specify optionnaly expected KwArgs
-func (va *VarArgs) ExpectKwArgs(kwargs []*KwArg) *ReducedVarArgs {
+// ExpectKwArgs allow to specify optionally expected KwArgs
+func (va *VarArgs) ExpectKwArgs(kwargs []*Kwarg) *ReducedVarArgs {
 	return va.Expect(0, kwargs)
 }
 
@@ -144,17 +193,17 @@ func (va *VarArgs) ExpectKwArgs(kwargs []*KwArg) *ReducedVarArgs {
 // but values are reduced (ie. kwargs given as args are accessible by name)
 type ReducedVarArgs struct {
 	*VarArgs
-	error error
+	err error
 }
 
 // IsError returns true if there was an error on Expect call
 func (rva *ReducedVarArgs) IsError() bool {
-	return rva.error != nil
+	return rva.err != nil
 }
 
 func (rva *ReducedVarArgs) Error() string {
 	if rva.IsError() {
-		return rva.error.Error()
+		return rva.err.Error()
 	}
 	return ""
 }

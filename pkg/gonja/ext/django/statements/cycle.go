@@ -3,11 +3,9 @@ package statements
 import (
 	"fmt"
 
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
-	"github.com/pkg/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type cycleValue struct {
@@ -16,14 +14,14 @@ type cycleValue struct {
 }
 
 type CycleStatement struct {
-	position *tokens.Token
-	args     []nodes.Expression
+	position *parse.Token
+	args     []parse.Expression
 	idx      int
 	asName   string
 	silent   bool
 }
 
-func (stmt *CycleStatement) Position() *tokens.Token { return stmt.position }
+func (stmt *CycleStatement) Position() *parse.Token { return stmt.position }
 func (stmt *CycleStatement) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("CycleStmt(Line=%d Col=%d)", t.Line, t.Col)
@@ -33,15 +31,12 @@ func (cv *cycleValue) String() string {
 	return cv.value.String()
 }
 
-func (stmt *CycleStatement) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
+func (stmt *CycleStatement) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
 	item := stmt.args[stmt.idx%len(stmt.args)]
 	stmt.idx++
 
 	val := r.Eval(item)
-	if val.IsError() {
-		return val
-	}
-
 	if t, ok := val.Interface().(*cycleValue); ok {
 		// {% cycle "test1" "test2"
 		// {% cycle cycleitem %}
@@ -50,21 +45,13 @@ func (stmt *CycleStatement) Execute(r *exec.Renderer, tag *nodes.StatementBlock)
 		item := t.node.args[t.node.idx%len(t.node.args)]
 		t.node.idx++
 
-		val := r.Eval(item)
-		if val.IsError() {
-			return val
-		}
-
-		t.value = val
-
+		t.value = r.Eval(item)
 		if !t.node.silent {
-			if _, err := r.WriteString(val.String()); err != nil {
-				return errors.Wrap(err, `Unable to execute cycle statement`)
-			}
+			r.WriteString(val.String())
 		}
+
 	} else {
 		// Regular call
-
 		cycleValue := &cycleValue{
 			node:  stmt,
 			value: val,
@@ -74,34 +61,27 @@ func (stmt *CycleStatement) Execute(r *exec.Renderer, tag *nodes.StatementBlock)
 			r.Ctx.Set(stmt.asName, cycleValue)
 		}
 		if !stmt.silent {
-			if _, err := r.WriteString(val.String()); err != nil {
-				return errors.Wrap(err, `Unable to execute 'cycle' statement`)
-			}
+			r.WriteString(val.String())
 		}
 	}
-
-	return nil
 }
 
 // HINT: We're not supporting the old comma-separated list of expressions argument-style
-func cycleParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func cycleParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	cycleNode := &CycleStatement{
 		position: p.Current(),
 	}
 
 	for !args.End() {
-		node, err := args.ParseExpression()
-		if err != nil {
-			return nil, err
-		}
+		node := args.ParseExpression()
 		cycleNode.args = append(cycleNode.args, node)
 
 		if args.MatchName("as") != nil {
 			// as
 
-			name := args.Match(tokens.Name)
+			name := args.Match(parse.TokenName)
 			if name == nil {
-				return nil, args.Error("Name (identifier) expected after 'as'.", nil)
+				errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "name (identifier) expected after 'as'")
 			}
 			cycleNode.asName = name.Val
 
@@ -115,10 +95,10 @@ func cycleParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error)
 	}
 
 	if !args.End() {
-		return nil, args.Error("Malformed cycle-tag.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "malformed cycle-tag")
 	}
 
-	return cycleNode, nil
+	return cycleNode
 }
 
 func init() {

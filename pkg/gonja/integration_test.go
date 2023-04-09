@@ -13,7 +13,7 @@ func TestTemplates(t *testing.T) {
 	// Add a global to the default set
 	root := "./testdata"
 	env := tu.TestEnv(root)
-	env.Globals.Set("this_is_a_global_variable", "this is a global text")
+	env.Globals["this_is_a_global_variable"] = "this is a global text"
 	tu.GlobTemplateTests(t, root, env)
 }
 

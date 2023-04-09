@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aisbergg/gonja/pkg/gonja"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 )
 
@@ -67,9 +66,9 @@ func (p *post) String() string {
  * End setup sandbox
  */
 
-var Fixtures = gonja.Context{
+var Fixtures = map[string]any{
 	"number": 11,
-	"simple": map[string]interface{}{
+	"simple": map[string]any{
 		"number":                   42,
 		"name":                     "john doe",
 		"included_file":            "INCLUDES.helper",
@@ -94,7 +93,7 @@ Yep!`,
 		"multiple_item_list": []int{1, 1, 2, 3, 5, 8, 13, 21, 34, 55},
 		"unsorted_int_list":  []int{192, 581, 22, 1, 249, 9999, 1828591, 8271},
 		"fixed_item_list":    [...]int{1, 2, 3, 4},
-		"misc_list":          []interface{}{"Hello", 99, 3.14, "good"},
+		"misc_list":          []any{"Hello", 99, 3.14, "good"},
 		"escape_text":        "This is \\a Test. \"Yep\". 'Yep'.",
 		"xss":                "<script>alert(\"uh oh\");</script>",
 		"intmap": map[int]string{
@@ -121,10 +120,10 @@ Yep!`,
 		"func_add": func(a, b int) int {
 			return a + b
 		},
-		"func_add_iface": func(a, b interface{}) interface{} {
+		"func_add_iface": func(a, b any) any {
 			return a.(int) + b.(int)
 		},
-		"func_variadic": func(msg string, args ...interface{}) string {
+		"func_variadic": func(msg string, args ...any) string {
 			return fmt.Sprintf(msg, args...)
 		},
 		"func_variadic_sum_int": func(args ...int) int {
@@ -150,12 +149,12 @@ Yep!`,
 				argsAsStr = append(argsAsStr, arg.String())
 			}
 			kwargsAsStr := []string{}
-			for key, value := range params.KwArgs {
-				v := value.String()
-				if value.IsString() {
+			for _, kv := range params.Kwargs {
+				v := kv.Value.String()
+				if kv.Value.IsString() {
 					v = "\"" + v + "\""
 				}
-				pair := []string{key, v}
+				pair := []string{kv.Key, v}
 				kwargsAsStr = append(kwargsAsStr, strings.Join(pair, "="))
 			}
 			sort.Strings(kwargsAsStr)
@@ -166,7 +165,7 @@ Yep!`,
 			return exec.AsSafeValue(str)
 		},
 	},
-	"complex": map[string]interface{}{
+	"complex": map[string]any{
 		"user": &user{
 			Name:      "john doe",
 			Validated: true,

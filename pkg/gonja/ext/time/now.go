@@ -5,14 +5,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	arrow "github.com/bmuller/arrow/lib"
 
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type Offset struct {
@@ -25,22 +22,23 @@ type Offset struct {
 }
 
 type NowStmt struct {
-	Location *tokens.Token
+	Location *parse.Token
 	TZ       string
 	Format   string
 	Offset   *Offset
 }
 
-func (stmt *NowStmt) Position() *tokens.Token { return stmt.Location }
+func (stmt *NowStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *NowStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("NowStmt(Line=%d Col=%d)", t.Line, t.Col)
 }
 
-func (stmt *NowStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
+func (stmt *NowStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
 	var now arrow.Arrow
 
-	cfg := r.Config.Ext["time"].(*Config)
+	cfg := r.ExtensionConfig["time"].(*Config)
 	format := cfg.DatetimeFormat
 
 	if cfg.Now != nil {
@@ -71,52 +69,49 @@ func (stmt *NowStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error 
 		}
 	}
 
-	if _, err := r.WriteString(now.CFormat(format)); err != nil {
-		return errors.Wrap(err, `Unable to render 'now' statement`)
-	}
-
-	return nil
+	r.WriteString(now.CFormat(format))
 }
 
-func nowParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func nowParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &NowStmt{
 		Location: p.Current(),
 	}
 
 	// Timezone
-	tz := args.Match(tokens.String)
+	tz := args.Match(parse.TokenString)
 	if tz == nil {
-		return nil, args.Error(`now expect a timezone as first argument`, args.Current())
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "now expect a timezone as first argument")
 	}
 	stmt.TZ = tz.Val
 
 	// Offset
-	if sign := args.Match(tokens.Add, tokens.Sub); sign != nil {
-		offset := args.Match(tokens.String)
+	if sign := args.Match(parse.TokenAdd, parse.TokenSub); sign != nil {
+		offset := args.Match(parse.TokenString)
 		if offset == nil {
-			return nil, args.Error("Expected an time offset.", args.Current())
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected an time offset")
 		}
 		timeOffset, err := parseTimeOffset(offset.Val, sign.Val == "+")
 		if err != nil {
-			return nil, errors.Wrapf(err, `Unable to parse time offset '%s'`, offset.Val)
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unable to parse time offset '%s': %s", offset.Val, err)
+
 		}
 		stmt.Offset = timeOffset
 	}
 
 	// Format
-	if args.Match(tokens.Comma) != nil {
-		format := args.Match(tokens.String)
+	if args.Match(parse.TokenComma) != nil {
+		format := args.Match(parse.TokenString)
 		if format == nil {
-			return nil, args.Error("Expected a format string.", args.Current())
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected a format string")
 		}
 		stmt.Format = format.Val
 	}
 
 	if !args.End() {
-		return nil, args.Error("Malformed now-tag args.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed now-tag args")
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func parseTimeOffset(offset string, add bool) (*Offset, error) {
@@ -125,12 +120,12 @@ func parseTimeOffset(offset string, add bool) (*Offset, error) {
 	for _, pair := range pairs {
 		splitted := strings.Split(pair, "=")
 		if len(splitted) != 2 {
-			return nil, errors.Errorf(`Expected a key=value pair, got '%s'`, pair)
+			return nil, fmt.Errorf("expected a key=value pair, got '%s'", pair)
 		}
 		unit := strings.TrimSpace(splitted[0])
 		value, err := strconv.Atoi(strings.TrimSpace(splitted[1]))
 		if err != nil {
-			return nil, errors.Wrap(err, `Unable to parse int`)
+			return nil, err
 		}
 		specs[unit] = value
 	}
@@ -153,7 +148,7 @@ func parseTimeOffset(offset string, add bool) (*Offset, error) {
 		case "second", "seconds":
 			to.Seconds = value
 		default:
-			return nil, errors.Errorf(`Unknown unit '%s`, unit)
+			return nil, fmt.Errorf("unknown unit '%s", unit)
 		}
 	}
 	return to, nil

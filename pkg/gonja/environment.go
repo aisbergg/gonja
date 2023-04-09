@@ -1,17 +1,18 @@
 package gonja
 
 import (
+	"fmt"
 	"io/ioutil"
 	"sync"
 
-	"github.com/goph/emperror"
-
 	"github.com/aisbergg/gonja/pkg/gonja/builtins"
-	"github.com/aisbergg/gonja/pkg/gonja/config"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 	"github.com/aisbergg/gonja/pkg/gonja/loaders"
 )
 
+// Environment is the core component of the Gonja template engine. It contains
+// important shared variables like configuration, filters, tests, globals and
+// others.
 type Environment struct {
 	*exec.EvalConfig
 	Loader loaders.Loader
@@ -20,9 +21,10 @@ type Environment struct {
 	CacheMutex sync.Mutex
 }
 
-func NewEnvironment(cfg *config.Config, loader loaders.Loader) *Environment {
+// NewEnvironment creates a new Environment instance.
+func NewEnvironment(loader loaders.Loader, options ...Option) *Environment {
 	env := &Environment{
-		EvalConfig: exec.NewEvalConfig(cfg),
+		EvalConfig: exec.NewEvalConfig(),
 		Loader:     loader,
 		Cache:      map[string]*exec.Template{},
 	}
@@ -30,10 +32,13 @@ func NewEnvironment(cfg *config.Config, loader loaders.Loader) *Environment {
 	env.Filters.Update(builtins.Filters)
 	env.Statements.Update(builtins.Statements)
 	env.Tests.Update(builtins.Tests)
-	env.Globals.Merge(builtins.Globals)
-	env.Globals.Set("gonja", map[string]interface{}{
-		"version": VERSION,
-	})
+	for k, v := range builtins.Globals {
+		env.Globals[k] = v
+	}
+
+	for _, option := range options {
+		option(env)
+	}
 	return env
 }
 
@@ -55,15 +60,7 @@ func (env *Environment) CleanCache(filenames ...string) {
 
 // FromCache is a convenient method to cache templates. It is thread-safe
 // and will only compile the template associated with a filename once.
-// If Environment.Debug is true (for example during development phase),
-// FromCache() will not cache the template and instead recompile it on any
-// call (to make changes to a template live instantaneously).
 func (env *Environment) FromCache(filename string) (*exec.Template, error) {
-	if env.Config.Debug {
-		// Recompile on any request
-		return env.FromFile(filename)
-	}
-
 	env.CacheMutex.Lock()
 	defer env.CacheMutex.Unlock()
 
@@ -97,16 +94,18 @@ func (env *Environment) FromBytes(tpl []byte) (*exec.Template, error) {
 func (env *Environment) FromFile(filename string) (*exec.Template, error) {
 	fd, err := env.Loader.Get(filename)
 	if err != nil {
-		return nil, emperror.With(err, "filename", filename)
+		// TODO: return loader error
+		return nil, fmt.Errorf("error loading template %s: %w", filename, err)
 	}
 	buf, err := ioutil.ReadAll(fd)
 	if err != nil {
-		return nil, emperror.With(err, "filename", filename)
+		return nil, fmt.Errorf("error loading template %s: %w", filename, err)
 	}
 
 	return exec.NewTemplate(filename, string(buf), env.EvalConfig)
 }
 
+// GetTemplate returns a template for the given filename.
 func (env *Environment) GetTemplate(filename string) (*exec.Template, error) {
 	return env.FromFile(filename)
 }

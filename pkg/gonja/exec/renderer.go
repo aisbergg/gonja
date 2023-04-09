@@ -1,14 +1,14 @@
 package exec
 
 import (
+	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
-
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
-// TrimState stores and apply trim policy
+// TrimState stores and applies the trim policy.
 type TrimState struct {
 	Should      bool
 	ShouldBlock bool
@@ -30,22 +30,25 @@ func (ts *TrimState) TrimBlocks(r rune) bool {
 	return false
 }
 
-// Renderer is a node visitor in charge of rendering
+// Renderer is a node visitor in charge of rendering a template.
 type Renderer struct {
 	*EvalConfig
 	Ctx      *Context
+	Resolver *Resolver
 	Template *Template
-	Root     *nodes.Template
+	Root     *parse.TemplateNode
+	Current  parse.Node
 	Out      *strings.Builder
 	Trim     *TrimState
 }
 
 // NewRenderer initialize a new renderer
-func NewRenderer(ctx *Context, out *strings.Builder, cfg *EvalConfig, tpl *Template) *Renderer {
+func NewRenderer(ctx *Context, resolver *Resolver, out *strings.Builder, cfg *EvalConfig, tpl *Template) *Renderer {
 	var buffer strings.Builder
 	r := &Renderer{
 		EvalConfig: cfg,
 		Ctx:        ctx,
+		Resolver:   resolver,
 		Template:   tpl,
 		Root:       tpl.Root,
 		Out:        out,
@@ -55,12 +58,14 @@ func NewRenderer(ctx *Context, out *strings.Builder, cfg *EvalConfig, tpl *Templ
 	return r
 }
 
-// Inherit creates a new sub renderer
+// Inherit creates a new sub renderer.
 func (r *Renderer) Inherit() *Renderer {
 	sub := &Renderer{
 		EvalConfig: r.EvalConfig.Inherit(),
 		Ctx:        r.Ctx.Inherit(),
+		Resolver:   r.Resolver,
 		Template:   r.Template,
+		Current:    r.Current,
 		Root:       r.Root,
 		Out:        r.Out,
 		Trim:       r.Trim,
@@ -68,13 +73,16 @@ func (r *Renderer) Inherit() *Renderer {
 	return sub
 }
 
+// Flush flushes the contents of the buffer to the final output.
 func (r *Renderer) Flush(lstrip bool) {
 	r.FlushAndTrim(false, lstrip)
 }
 
+// FlushAndTrim trims the contents of the buffer according to the trim policy
+// and flushes it to the final output.
 func (r *Renderer) FlushAndTrim(trim, lstrip bool) {
 	txt := r.Trim.Buffer.String()
-	if r.Config.LstripBlocks && !lstrip {
+	if r.LstripBlocks && !lstrip {
 		lines := strings.Split(txt, "\n")
 		last := lines[len(lines)-1]
 		lines[len(lines)-1] = strings.TrimLeft(last, " \t")
@@ -87,9 +95,10 @@ func (r *Renderer) FlushAndTrim(trim, lstrip bool) {
 	r.Trim.Buffer.Reset()
 }
 
-// WriteString wraps the triming policy
-func (r *Renderer) WriteString(txt string) (int, error) {
-	if r.Config.TrimBlocks {
+// WriteString applies the trim policy on the given string and writes it to the
+// buffer.
+func (r *Renderer) WriteString(txt string) int {
+	if r.TrimBlocks {
 		txt = strings.TrimLeftFunc(txt, r.Trim.TrimBlocks)
 	}
 	if r.Trim.Should {
@@ -98,24 +107,23 @@ func (r *Renderer) WriteString(txt string) (int, error) {
 			r.Trim.Should = false
 		}
 	}
-	return r.Trim.Buffer.WriteString(txt)
-}
-
-// RenderValue properly render a value
-func (r *Renderer) RenderValue(value *Value) error {
-	if r.Autoescape && value.IsString() && !value.Safe {
-		if _, err := r.WriteString(value.Escaped()); err != nil {
-			return errors.Wrap(err, "Unable to render value")
-		}
-	} else {
-		if _, err := r.WriteString(value.String()); err != nil {
-			return errors.Wrap(err, "Unable to render value")
-		}
+	l, err := r.Trim.Buffer.WriteString(txt)
+	if err != nil {
+		errors.ThrowTemplateRuntimeError("unable to write to buffer: %s", err)
 	}
-	return nil
+	return l
 }
 
-func (r *Renderer) StartTag(trim *nodes.Trim, lstrip bool) {
+// RenderValue renders a single value.
+func (r *Renderer) RenderValue(value *Value) {
+	if r.Autoescape && value.IsString() && !value.Safe {
+		r.WriteString(value.Escaped())
+	} else {
+		r.WriteString(value.String())
+	}
+}
+
+func (r *Renderer) StartTag(trim *parse.Trim, lstrip bool) {
 	if trim == nil {
 		r.Flush(lstrip)
 	} else {
@@ -124,88 +132,111 @@ func (r *Renderer) StartTag(trim *nodes.Trim, lstrip bool) {
 	r.Trim.Should = false
 }
 
-func (r *Renderer) EndTag(trim *nodes.Trim) {
+func (r *Renderer) EndTag(trim *parse.Trim) {
 	if trim == nil {
 		return
 	}
 	r.Trim.Should = trim.Right
 }
 
-func (r *Renderer) Tag(trim *nodes.Trim, lstrip bool) {
+func (r *Renderer) Tag(trim *parse.Trim, lstrip bool) {
 	r.StartTag(trim, lstrip)
 	r.EndTag(trim)
 }
 
-// Visit implements the nodes.Visitor interface
-func (r *Renderer) Visit(node nodes.Node) (nodes.Visitor, error) {
+// walk steps through the major pieces of the template structure and generates
+// the output.
+func (r *Renderer) walk(node parse.Node) {
+	r.Current = node
 	switch n := node.(type) {
-	case *nodes.Comment:
-		r.Tag(n.Trim, false)
-		return nil, nil
-	case *nodes.Data:
-		if _, err := r.WriteString(n.Data.Val); err != nil {
-			return nil, errors.Wrapf(err, `Unable to render data '%s'`, n.Data)
-		}
-		return nil, nil
-	case *nodes.Output:
+	case *parse.DataNode:
+		r.WriteString(n.Data.Val)
+
+	case *parse.OutputNode:
 		r.StartTag(n.Trim, false)
 		value := r.Eval(n.Expression)
-		if value.IsError() {
-			return nil, errors.Wrapf(value, `Unable to render expression '%s'`, n.Expression)
-		}
-		if err := r.RenderValue(value); err != nil {
-			return nil, errors.Wrapf(err, `Unable to render expression '%s'`, n.Expression)
-		}
+		r.RenderValue(value)
 		r.EndTag(n.Trim)
-		return nil, nil
-	case *nodes.StatementBlock:
+
+	case *parse.StatementBlockNode:
 		r.Tag(n.Trim, n.LStrip)
-		r.Trim.ShouldBlock = r.Config.TrimBlocks
-		stmt, ok := n.Stmt.(Statement)
-		if ok {
-			// Silently ignore non executable statements
-			// return nil, nil
-			// return nil, errors.Errorf(`Unable to execute statement '%s'`, n.Stmt)
-			if err := stmt.Execute(r, n); err != nil {
-				return nil, errors.Wrapf(err, `Unable to execute statement '%s'`, n.Stmt)
-			}
+		r.Trim.ShouldBlock = r.TrimBlocks
+		// Silently ignore non executable statements
+		if stmt, ok := n.Stmt.(Statement); ok {
+			stmt.Execute(r, n)
 		}
-		return nil, nil
+
+	case *parse.CommentNode:
+		r.Tag(n.Trim, false)
+
+	case *parse.WrapperNode:
+		for _, node := range n.Nodes {
+			r.walk(node)
+		}
+
+	case *parse.TemplateNode:
+		for _, node := range n.Nodes {
+			r.walk(node)
+		}
+
 	default:
-		return r, nil
+		panic(fmt.Errorf("BUG: cannot walk unknown node '%s'", r.Current))
 	}
 }
 
-// ExecuteWrapper wraps the nodes.Wrapper execution logic
-func (r *Renderer) ExecuteWrapper(wrapper *nodes.Wrapper) error {
+// ExecuteWrapper wraps the parse.Wrapper execution logic
+func (r *Renderer) ExecuteWrapper(wrapper *parse.WrapperNode) (err error) {
 	sub := r.Inherit()
-	err := nodes.Walk(sub, wrapper)
+	sub.Current = wrapper
+
+	// catch all runtime errors and rethrow others
+	defer func() {
+		if rec := recover(); rec != nil {
+			if rerr, ok := rec.(errors.TemplateRuntimeError); ok {
+				rerr.Enrich(parse.AsErrorToken(sub.Current.Position()))
+				err = rerr
+			} else {
+				panic(rec)
+			}
+		}
+	}()
+	sub.walk(wrapper)
 	sub.Tag(wrapper.Trim, wrapper.LStrip)
-	r.Trim.ShouldBlock = r.Config.TrimBlocks
-	return err
+	r.Trim.ShouldBlock = r.TrimBlocks
+	return nil
 }
 
-func (r *Renderer) LStrip() {
-}
+func (r *Renderer) LStrip() {}
 
-func (r *Renderer) Execute() error {
+// Execute performs the render process by visiting every node and turning them
+// into text.
+func (r *Renderer) Execute() (err error) {
+	// catch all runtime errors and rethrow others
+	defer func() {
+		if rec := recover(); rec != nil {
+			if rerr, ok := rec.(errors.TemplateRuntimeError); ok {
+				rerr.Enrich(parse.AsErrorToken(r.Current.Position()))
+				err = rerr
+			} else {
+				panic(rec)
+			}
+		}
+	}()
+
 	// Determine the parent to be executed (for template inheritance)
 	root := r.Root
 	for root.Parent != nil {
 		root = root.Parent
 	}
-
-	err := nodes.Walk(r, root)
-	if err == nil {
-		r.Flush(false)
-	}
-	return err
+	r.walk(root)
+	r.Flush(false)
+	return nil
 }
 
 func (r *Renderer) String() string {
 	r.Flush(false)
 	out := r.Out.String()
-	if !r.Config.KeepTrailingNewline {
+	if !r.KeepTrailingNewline {
 		out = strings.TrimSuffix(out, "\n")
 	}
 	return out

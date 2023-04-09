@@ -1,7 +1,6 @@
 package gonja
 
 import (
-	"github.com/aisbergg/gonja/pkg/gonja/config"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 	"github.com/aisbergg/gonja/pkg/gonja/loaders"
 )
@@ -11,11 +10,9 @@ var (
 	DefaultLoader = loaders.MustNewFileSystemLoader("")
 
 	// DefaultEnv is an environment created for quick/standalone template rendering.
-	DefaultEnv = NewEnvironment(config.DefaultConfig, DefaultLoader)
+	DefaultEnv = NewEnvironment(DefaultLoader)
 
 	// Methods on the default set
-	//--
-
 	FromString = DefaultEnv.FromString
 	FromBytes  = DefaultEnv.FromBytes
 	FromFile   = DefaultEnv.FromFile

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -23,7 +22,7 @@ type FilesystemLoader struct {
 func MustNewFileSystemLoader(root string) *FilesystemLoader {
 	fs, err := NewFileSystemLoader(root)
 	if err != nil {
-		log.Panic(err)
+		panic(err)
 	}
 	return fs
 }

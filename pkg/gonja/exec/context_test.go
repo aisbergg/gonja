@@ -3,13 +3,13 @@ package exec_test
 import (
 	"testing"
 
+	"github.com/aisbergg/gonja/internal/testutils"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/stretchr/testify/assert"
 )
 
 var ctxCases = []struct {
 	name     string
-	value    interface{}
+	value    any
 	asString string
 	flags    flags
 }{
@@ -32,7 +32,7 @@ func TestContext(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			assert := assert.New(t)
+			assert := testutils.NewAssert(t)
 
 			ctx := exec.EmptyContext()
 			ctx.Set(test.name, test.value)
@@ -56,7 +56,7 @@ func TestSubContext(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			assert := assert.New(t)
+			assert := testutils.NewAssert(t)
 
 			ctx := exec.EmptyContext()
 			ctx.Set(test.name, test.value)
@@ -92,11 +92,13 @@ func TestFuncContext(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			assert := assert.New(t)
+			assert := testutils.NewAssert(t)
 
 			value := test.ctx.Get("func")
-			_, ok := value.(func())
-			assert.True(ok)
+			if assert.True(value.IsCallable()) {
+				_, ok := value.Interface().(func())
+				assert.True(ok)
+			}
 		})
 	}
 }
@@ -110,9 +112,9 @@ func TestFuncContext(t *testing.T) {
 // 					t.Error(err)
 // 				}
 // 			}()
-// 			assert := assert.New(t)
+// 			assert := testutils.NewAssert(t)
 
-// 			data := map[string]interface{}{"value": test.value}
+// 			data := map[string]any{"value": test.value}
 // 			value := exec.AsValue(data["value"])
 
 // 			assert.Equal(test.asString, value.String())
@@ -127,7 +129,7 @@ func TestFuncContext(t *testing.T) {
 
 // var getattrCases = []struct {
 // 	name     string
-// 	value    interface{}
+// 	value    any
 // 	attr     string
 // 	found    bool
 // 	asString string
@@ -135,7 +137,7 @@ func TestFuncContext(t *testing.T) {
 // }{
 // 	{"nil", nil, "missing", false, "", flags{IsError: true}},
 // 	{"attr found", testStruct{"test"}, "Attr", true, "test", flags{IsString: true, IsTrue: true}},
-// 	{"item", map[string]interface{}{"Attr": "test"}, "Attr", false, "", flags{IsError: true}},
+// 	{"item", map[string]any{"Attr": "test"}, "Attr", false, "", flags{IsError: true}},
 // }
 
 // func TestValueGetAttr(t *testing.T) {
@@ -147,7 +149,7 @@ func TestFuncContext(t *testing.T) {
 // 					t.Error(err)
 // 				}
 // 			}()
-// 			assert := assert.New(t)
+// 			assert := testutils.NewAssert(t)
 
 // 			value := exec.AsValue(test.value)
 // 			out, found := value.Getattr(test.attr)
@@ -170,18 +172,18 @@ func TestFuncContext(t *testing.T) {
 
 // var getitemCases = []struct {
 // 	name     string
-// 	value    interface{}
-// 	key      interface{}
+// 	value    any
+// 	key      any
 // 	found    bool
 // 	asString string
 // 	flags    flags
 // }{
 // 	{"nil", nil, "missing", false, "", flags{IsError: true}},
-// 	{"item found", map[string]interface{}{"Attr": "test"}, "Attr", true, "test", flags{IsString: true, IsTrue: true}},
+// 	{"item found", map[string]any{"Attr": "test"}, "Attr", true, "test", flags{IsString: true, IsTrue: true}},
 // 	{"attr", testStruct{"test"}, "Attr", false, "", flags{IsError: true}},
 // }
 
-// func TestValueGetitem(t *testing.T) {
+// func TestValueGetItem(t *testing.T) {
 // 	for _, lc := range getitemCases {
 // 		test := lc
 // 		t.Run(test.name, func(t *testing.T) {
@@ -190,10 +192,10 @@ func TestFuncContext(t *testing.T) {
 // 					t.Error(err)
 // 				}
 // 			}()
-// 			assert := assert.New(t)
+// 			assert := testutils.NewAssert(t)
 
 // 			value := exec.AsValue(test.value)
-// 			out, found := value.Getitem(test.key)
+// 			out, found := value.GetItem(test.key)
 
 // 			if !test.flags.IsError && out.IsError() {
 // 				t.Fatalf(`Unexpected error: %s`, out.Error())

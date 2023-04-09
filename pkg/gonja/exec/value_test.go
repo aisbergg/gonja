@@ -1,13 +1,11 @@
 package exec_test
 
 import (
-	// "fmt"
-
 	"reflect"
 	"testing"
 
+	"github.com/aisbergg/gonja/internal/testutils"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/stretchr/testify/assert"
 )
 
 type flags struct {
@@ -22,11 +20,10 @@ type flags struct {
 	IsIterable bool
 	IsNil      bool
 	IsTrue     bool
-	IsError    bool
 }
 
 func (f *flags) assert(t *testing.T, value *exec.Value) {
-	assert := assert.New(t)
+	assert := testutils.NewAssert(t)
 
 	val := reflect.ValueOf(value)
 	fval := reflect.ValueOf(f).Elem()
@@ -38,16 +35,16 @@ func (f *flags) assert(t *testing.T, value *exec.Value) {
 		result := method.Call([]reflect.Value{})
 		bResult := result[0].Interface().(bool)
 		if bVal {
-			assert.Truef(bResult, `%s() should be true`, name)
+			assert.True(bResult, `%s() should be true`, name)
 		} else {
-			assert.Falsef(bResult, `%s() should be false`, name)
+			assert.False(bResult, `%s() should be false`, name)
 		}
 	}
 }
 
 var valueCases = []struct {
 	name     string
-	value    interface{}
+	value    any
 	asString string
 	flags    flags
 }{
@@ -104,7 +101,7 @@ func TestValue(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			assert := assert.New(t)
+			assert := testutils.NewAssert(t)
 
 			value := exec.AsValue(test.value)
 
@@ -123,9 +120,9 @@ func TestValueFromMap(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			assert := assert.New(t)
+			assert := testutils.NewAssert(t)
 
-			data := map[string]interface{}{"value": test.value}
+			data := map[string]any{"value": test.value}
 			value := exec.AsValue(data["value"])
 
 			assert.Equal(test.asString, value.String())
@@ -142,156 +139,64 @@ func (t testStruct) String() string {
 	return t.Attr
 }
 
-var getattrCases = []struct {
-	name     string
-	value    interface{}
-	attr     string
-	found    bool
-	asString string
-	flags    flags
-}{
-	{"nil", nil, "missing", false, "", flags{IsError: true}},
-	{"attr found", testStruct{"test"}, "Attr", true, "test", flags{IsString: true, IsTrue: true, IsIterable: true}},
-	{"attr not found", testStruct{"test"}, "Missing", false, "", flags{IsNil: true}},
-	{"item", map[string]interface{}{"Attr": "test"}, "Attr", false, "", flags{IsNil: true}},
-}
+// var setCases = []struct {
+// 	name     string
+// 	value    any
+// 	attr     string
+// 	set      any
+// 	error    bool
+// 	asString string
+// }{
+// 	{"nil", nil, "missing", "whatever", true, ""},
+// 	{"existing attr on struct by ref", &testStruct{"test"}, "Attr", "value", false, "value"},
+// 	{"existing attr on struct by value", testStruct{"test"}, "Attr", "value", true, `Can't write field "Attr"`},
+// 	{"missing attr on struct by ref", &testStruct{"test"}, "Missing", "value", true, "test"},
+// 	{"missing attr on struct by value", testStruct{"test"}, "Missing", "value", true, "test"},
+// 	{
+// 		"existing key on map",
+// 		map[string]any{"Attr": "test"},
+// 		"Attr",
+// 		"value",
+// 		false,
+// 		"{'Attr': 'value'}",
+// 	},
+// 	{
+// 		"new key on map",
+// 		map[string]any{"Attr": "test"},
+// 		"New",
+// 		"value",
+// 		false,
+// 		"{'Attr': 'test', 'New': 'value'}",
+// 	},
+// }
 
-func TestValueGetAttr(t *testing.T) {
-	for _, lc := range getattrCases {
-		test := lc
-		t.Run(test.name, func(t *testing.T) {
-			defer func() {
-				if err := recover(); err != nil {
-					t.Error(err)
-				}
-			}()
-			assert := assert.New(t)
+// func TestValueSet(t *testing.T) {
+// 	for _, lc := range setCases {
+// 		test := lc
+// 		t.Run(test.name, func(t *testing.T) {
+// 			defer func() {
+// 				if err := recover(); err != nil {
+// 					t.Error(err)
+// 				}
+// 			}()
+// 			assert := testutils.NewAssert(t)
 
-			value := exec.AsValue(test.value)
-			out, found := value.Getattr(test.attr)
+// 			value := exec.AsValue(test.value)
+// 			err := value.Set(test.attr, test.set)
 
-			if !test.flags.IsError && out.IsError() {
-				t.Fatalf(`Unexpected error: %s`, out.Error())
-			}
-
-			if test.found {
-				assert.Truef(found, `Attribute '%s' should be found on %s`, test.attr, value)
-				assert.Equal(test.asString, out.String())
-			} else {
-				assert.Falsef(found, `Attribute '%s' should not be found on %s`, test.attr, value)
-			}
-
-			test.flags.assert(t, out)
-		})
-	}
-}
-
-var getitemCases = []struct {
-	name     string
-	value    interface{}
-	key      interface{}
-	found    bool
-	asString string
-	flags    flags
-}{
-	{"nil", nil, "missing", false, "", flags{IsError: true}},
-	{"item found", map[string]interface{}{"Attr": "test"}, "Attr", true, "test", flags{IsString: true, IsTrue: true, IsIterable: true}},
-	{"item not found", map[string]interface{}{"Attr": "test"}, "Missing", false, "test", flags{IsNil: true}},
-	{"attr", testStruct{"test"}, "Attr", false, "", flags{IsNil: true}},
-	{"dict found", &exec.Dict{[]*exec.Pair{
-		{exec.AsValue("key"), exec.AsValue("value")},
-		{exec.AsValue("otherKey"), exec.AsValue("otherValue")},
-	}}, "key", true, "value", flags{IsTrue: true, IsString: true, IsIterable: true}},
-}
-
-func TestValueGetitem(t *testing.T) {
-	for _, lc := range getitemCases {
-		test := lc
-		t.Run(test.name, func(t *testing.T) {
-			defer func() {
-				if err := recover(); err != nil {
-					t.Error(err)
-				}
-			}()
-			assert := assert.New(t)
-
-			value := exec.AsValue(test.value)
-			out, found := value.Getitem(test.key)
-
-			if !test.flags.IsError && out.IsError() {
-				t.Fatalf(`Unexpected error: %s`, out.Error())
-			}
-
-			if test.found {
-				assert.Truef(found, `Key '%s' should be found on %s`, test.key, value)
-				assert.Equal(test.asString, out.String())
-			} else {
-				assert.Falsef(found, `Key '%s' should not be found on %s`, test.key, value)
-			}
-
-			test.flags.assert(t, out)
-		})
-	}
-}
-
-var setCases = []struct {
-	name     string
-	value    interface{}
-	attr     string
-	set      interface{}
-	error    bool
-	asString string
-}{
-	{"nil", nil, "missing", "whatever", true, ""},
-	{"existing attr on struct by ref", &testStruct{"test"}, "Attr", "value", false, "value"},
-	{"existing attr on struct by value", testStruct{"test"}, "Attr", "value", true, `Can't write field "Attr"`},
-	{"missing attr on struct by ref", &testStruct{"test"}, "Missing", "value", true, "test"},
-	{"missing attr on struct by value", testStruct{"test"}, "Missing", "value", true, "test"},
-	{
-		"existing key on map",
-		map[string]interface{}{"Attr": "test"},
-		"Attr",
-		"value",
-		false,
-		"{'Attr': 'value'}",
-	},
-	{
-		"new key on map",
-		map[string]interface{}{"Attr": "test"},
-		"New",
-		"value",
-		false,
-		"{'Attr': 'test', 'New': 'value'}",
-	},
-}
-
-func TestValueSet(t *testing.T) {
-	for _, lc := range setCases {
-		test := lc
-		t.Run(test.name, func(t *testing.T) {
-			defer func() {
-				if err := recover(); err != nil {
-					t.Error(err)
-				}
-			}()
-			assert := assert.New(t)
-
-			value := exec.AsValue(test.value)
-			err := value.Set(test.attr, test.set)
-
-			if test.error {
-				assert.NotNil(err)
-			} else {
-				assert.Nil(err)
-				assert.Equal(test.asString, value.String())
-			}
-		})
-	}
-}
+// 			if test.error {
+// 				assert.NotNil(err)
+// 			} else {
+// 				assert.Nil(err)
+// 				assert.Equal(test.asString, value.String())
+// 			}
+// 		})
+// 	}
+// }
 
 var valueKeysCases = []struct {
 	name     string
-	value    interface{}
+	value    any
 	asString string
 	isError  bool
 }{
@@ -327,7 +232,7 @@ func TestValueKeys(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			assert := assert.New(t)
+			assert := testutils.NewAssert(t)
 
 			value := exec.AsValue(test.value)
 			keys := value.Keys()

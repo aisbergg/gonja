@@ -1,9 +1,8 @@
 package exec
 
 import (
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 	"github.com/pkg/errors"
-
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
 )
 
 // FilterFunction is the type filter functions must fulfil
@@ -33,7 +32,7 @@ func (fs *FilterSet) Register(name string, fn FilterFunction) error {
 }
 
 // Replace replaces an already registered filter with a new implementation. Use this
-// function with caution since it allows you to change existing filter behaviour.
+// function with caution since it allows you to change existing filter behavior.
 func (fs *FilterSet) Replace(name string, fn FilterFunction) error {
 	if !fs.Exists(name) {
 		return errors.Errorf("filter with name '%s' does not exist (therefore cannot be overridden)", name)
@@ -49,41 +48,32 @@ func (fs *FilterSet) Update(other FilterSet) FilterSet {
 	return *fs
 }
 
-// EvaluateFiltered evaluate a filtered expression
-func (e *Evaluator) EvaluateFiltered(expr *nodes.FilteredExpression) *Value {
+// EvaluateFiltered evaluates a filtered expression.
+func (e *Evaluator) EvaluateFiltered(expr *parse.FilteredExpression) *Value {
 	value := e.Eval(expr.Expression)
 
 	for _, filter := range expr.Filters {
 		value = e.ExecuteFilter(filter, value)
-		if value.IsError() {
-			return AsValue(errors.Wrapf(value, `Unable to evaluate filter %s`, filter))
-		}
 	}
 
 	// if value.IsError() {
-	// 	return AsValue(errors.Wrapf(value, `Unable to filter chain`, expr.Expression))
+	// 	return AsValue(errors.Wrapf(value, "unable to filter chain", expr.Expression))
 	// }
 	return value
 }
 
 // ExecuteFilter execute a filter node
-func (e *Evaluator) ExecuteFilter(fc *nodes.FilterCall, v *Value) *Value {
+func (e *Evaluator) ExecuteFilter(fc *parse.FilterCall, v *Value) *Value {
 	params := NewVarArgs()
 
 	for _, param := range fc.Args {
 		value := e.Eval(param)
-		if value.IsError() {
-			return AsValue(errors.Wrapf(value, `Unable to evaluate parameter %s`, param))
-		}
 		params.Args = append(params.Args, value)
 	}
 
 	for key, param := range fc.Kwargs {
 		value := e.Eval(param)
-		if value.IsError() {
-			return AsValue(errors.Wrapf(value, `Unable to evaluate parameter %s=%s`, key, param))
-		}
-		params.KwArgs[key] = value
+		params.SetKwarg(key, value)
 	}
 	return e.ExecuteFilterByName(fc.Name, v, params)
 }
@@ -91,7 +81,7 @@ func (e *Evaluator) ExecuteFilter(fc *nodes.FilterCall, v *Value) *Value {
 // ExecuteFilterByName execute a filter given its name
 func (e *Evaluator) ExecuteFilterByName(name string, in *Value, params *VarArgs) *Value {
 	if !e.Filters.Exists(name) {
-		return AsValue(errors.Errorf(`Filter "%s" not found`, name))
+		return AsValue(errors.Errorf("Filter '%s' not found", name))
 	}
 	fn := (*e.Filters)[name]
 

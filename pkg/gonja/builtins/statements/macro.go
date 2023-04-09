@@ -3,30 +3,25 @@ package statements
 import (
 	"fmt"
 
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
-	"github.com/pkg/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type MacroStmt struct {
-	*nodes.Macro
+	*parse.MacroNode
 }
 
 // func (stmt *MacroStmt) Position() *tokens.Token { return stmt.Location }
 func (stmt *MacroStmt) String() string {
 	t := stmt.Position()
-	return fmt.Sprintf("MacroStmt(Macro=%s Line=%d Col=%d)", stmt.Macro, t.Line, t.Col)
+	return fmt.Sprintf("MacroStmt(Macro=%s Line=%d Col=%d)", stmt.MacroNode, t.Line, t.Col)
 }
 
-func (stmt *MacroStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
-	macro, err := exec.MacroNodeToFunc(stmt.Macro, r)
-	if err != nil {
-		return errors.Wrapf(err, `Unable to parse marco '%s'`, stmt.Name)
-	}
+func (stmt *MacroStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
+	macro := exec.MacroNodeToFunc(stmt.MacroNode, r)
 	r.Ctx.Set(stmt.Name, macro)
-	return nil
 }
 
 // func (node *MacroStmt) call(ctx *exec.Context, args ...*exec.Value) *exec.Value {
@@ -77,37 +72,34 @@ func (stmt *MacroStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) erro
 // 	return nil
 // }
 
-func macroParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
-	stmt := &nodes.Macro{
+func macroParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+	stmt := &parse.MacroNode{
 		Location: p.Current(),
 		Args:     []string{},
-		Kwargs:   []*nodes.Pair{},
+		Kwargs:   []*parse.PairNode{},
 	}
 
-	name := args.Match(tokens.Name)
+	name := args.Match(parse.TokenName)
 	if name == nil {
-		return nil, args.Error("Macro-tag needs at least an identifier as name.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "macro-tag needs at least an identifier as name.")
 	}
 	stmt.Name = name.Val
 
-	if args.Match(tokens.Lparen) == nil {
-		return nil, args.Error("Expected '('.", nil)
+	if args.Match(parse.TokenLparen) == nil {
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unexpected '%s', expected '('", args.Current().Val)
 	}
 
-	for args.Match(tokens.Rparen) == nil {
-		argName := args.Match(tokens.Name)
+	for args.Match(parse.TokenRparen) == nil {
+		argName := args.Match(parse.TokenName)
 		if argName == nil {
-			return nil, args.Error("Expected argument name as identifier.", nil)
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected argument name as identifier.")
 		}
 
-		if args.Match(tokens.Assign) != nil {
+		if args.Match(parse.TokenAssign) != nil {
 			// Default expression follows
-			expr, err := args.ParseExpression()
-			if err != nil {
-				return nil, err
-			}
-			stmt.Kwargs = append(stmt.Kwargs, &nodes.Pair{
-				Key:   &nodes.String{argName, argName.Val},
+			expr := args.ParseExpression()
+			stmt.Kwargs = append(stmt.Kwargs, &parse.PairNode{
+				Key:   &parse.StringNode{argName, argName.Val},
 				Value: expr,
 			})
 			// stmt.Kwargs[argName.Val] = expr
@@ -115,11 +107,11 @@ func macroParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error)
 			stmt.Args = append(stmt.Args, argName.Val)
 		}
 
-		if args.Match(tokens.Rparen) != nil {
+		if args.Match(parse.TokenRparen) != nil {
 			break
 		}
-		if args.Match(tokens.Comma) == nil {
-			return nil, args.Error("Expected ',' or ')'.", nil)
+		if args.Match(parse.TokenComma) == nil {
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unexpected '%s', expected ',' or ')'", args.Current().Val)
 		}
 	}
 
@@ -128,18 +120,15 @@ func macroParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error)
 	// }
 
 	if !args.End() {
-		return nil, args.Error("Malformed macro-tag.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed macro-tag.")
 	}
 
 	// Body wrapping
-	wrapper, endargs, err := p.WrapUntil("endmacro")
-	if err != nil {
-		return nil, err
-	}
+	wrapper, endargs := p.WrapUntil("endmacro")
 	stmt.Wrapper = wrapper
 
 	if !endargs.End() {
-		return nil, endargs.Error("Arguments not allowed here.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(endargs.Current()), "arguments not allowed here")
 	}
 
 	p.Template.Macros[stmt.Name] = stmt
@@ -153,7 +142,7 @@ func macroParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error)
 	// 	p.template.exportedMacros[stmt.name] = stmt
 	// }
 
-	return &MacroStmt{stmt}, nil
+	return &MacroStmt{stmt}
 }
 
 func init() {

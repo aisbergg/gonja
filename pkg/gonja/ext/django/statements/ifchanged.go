@@ -1,34 +1,31 @@
 package statements
 
 import (
-	// "bytes"
-
 	"fmt"
 	"strings"
 
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
-	"github.com/pkg/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type IfChangedStmt struct {
-	Location    *tokens.Token
-	watchedExpr []nodes.Expression
+	Location    *parse.Token
+	watchedExpr []parse.Expression
 	lastValues  []*exec.Value
 	lastContent string
-	thenWrapper *nodes.Wrapper
-	elseWrapper *nodes.Wrapper
+	thenWrapper *parse.WrapperNode
+	elseWrapper *parse.WrapperNode
 }
 
-func (stmt *IfChangedStmt) Position() *tokens.Token { return stmt.Location }
+func (stmt *IfChangedStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *IfChangedStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("IfChangedStmt(Line=%d Col=%d)", t.Line, t.Col)
 }
 
-func (stmt *IfChangedStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
+func (stmt *IfChangedStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
 	if len(stmt.watchedExpr) == 0 {
 		// Check against own rendered body
 		var out strings.Builder
@@ -36,24 +33,19 @@ func (stmt *IfChangedStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) 
 		sub.Out = &out
 		err := sub.ExecuteWrapper(stmt.thenWrapper)
 		if err != nil {
-			return err
+			panic(err)
 		}
 
 		str := out.String()
 		if stmt.lastContent != str {
 			// Rendered content changed, output it
-			if _, err = r.WriteString(str); err != nil {
-				return errors.Wrap(err, `Unable to execute 'ifchanged' statement`)
-			}
+			r.WriteString(str)
 			stmt.lastContent = str
 		}
 	} else {
 		nowValues := make([]*exec.Value, 0, len(stmt.watchedExpr))
 		for _, expr := range stmt.watchedExpr {
 			val := r.Eval(expr)
-			if val.IsError() {
-				return val
-			}
 			nowValues = append(nowValues, val)
 		}
 
@@ -73,63 +65,52 @@ func (stmt *IfChangedStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) 
 			// Render thenWrapper
 			err := r.ExecuteWrapper(stmt.thenWrapper)
 			if err != nil {
-				return err
+				panic(err)
 			}
 		} else {
 			// Render elseWrapper
 			err := r.ExecuteWrapper(stmt.elseWrapper)
 			if err != nil {
-				return err
+				panic(err)
 			}
 		}
 	}
-
-	return nil
 }
 
-func ifchangedParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func ifchangedParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &IfChangedStmt{
 		Location: p.Current(),
 	}
 
 	for !args.End() {
 		// Parse condition
-		expr, err := args.ParseExpression()
-		if err != nil {
-			return nil, err
-		}
+		expr := args.ParseExpression()
 		stmt.watchedExpr = append(stmt.watchedExpr, expr)
 	}
 
 	if !args.End() {
-		return nil, args.Error("Ifchanged-arguments are malformed.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "ifchanged-arguments are malformed")
 	}
 
 	// Wrap then/else-blocks
-	wrapper, endargs, err := p.WrapUntil("else", "endifchanged")
-	if err != nil {
-		return nil, err
-	}
+	wrapper, endargs := p.WrapUntil("else", "endifchanged")
 	stmt.thenWrapper = wrapper
 
 	if !endargs.End() {
-		return nil, endargs.Error("Arguments not allowed here.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(endargs.Current()), "arguments not allowed here")
 	}
 
 	if wrapper.EndTag == "else" {
 		// if there's an else in the if-statement, we need the else-Block as well
-		wrapper, endargs, err = p.WrapUntil("endifchanged")
-		if err != nil {
-			return nil, err
-		}
+		wrapper, endargs = p.WrapUntil("endifchanged")
 		stmt.elseWrapper = wrapper
 
 		if !endargs.End() {
-			return nil, endargs.Error("Arguments not allowed here.", nil)
+			errors.ThrowSyntaxError(parse.AsErrorToken(endargs.Current()), "arguments not allowed here")
 		}
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {

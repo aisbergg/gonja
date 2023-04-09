@@ -5,19 +5,17 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
-	"github.com/pkg/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type SpacelessStmt struct {
-	Location *tokens.Token
-	wrapper  *nodes.Wrapper
+	Location *parse.Token
+	wrapper  *parse.WrapperNode
 }
 
-func (stmt *SpacelessStmt) Position() *tokens.Token { return stmt.Location }
+func (stmt *SpacelessStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *SpacelessStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("SpacelessStmt(Line=%d Col=%d)", t.Line, t.Col)
@@ -25,13 +23,14 @@ func (stmt *SpacelessStmt) String() string {
 
 var spacelessRegexp = regexp.MustCompile(`(?U:(<.*>))([\t\n\v\f\r ]+)(?U:(<.*>))`)
 
-func (stmt *SpacelessStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
+func (stmt *SpacelessStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
 	var out strings.Builder
 
 	sub := r.Inherit()
 	sub.Out = &out
 	if err := sub.ExecuteWrapper(stmt.wrapper); err != nil {
-		return errors.Wrap(err, `Unable to execute 'spaceless' statement`)
+		panic(err)
 	}
 
 	s := out.String()
@@ -43,29 +42,22 @@ func (stmt *SpacelessStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) 
 		s = s2
 	}
 
-	if _, err := r.WriteString(s); err != nil {
-		return errors.Wrap(err, `Unable to execute 'spaceless' statement`)
-	}
-
-	return nil
+	r.WriteString(s)
 }
 
-func spacelessParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func spacelessParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &SpacelessStmt{
 		Location: p.Current(),
 	}
 
-	wrapper, _, err := p.WrapUntil("endspaceless")
-	if err != nil {
-		return nil, err
-	}
+	wrapper, _ := p.WrapUntil("endspaceless")
 	stmt.wrapper = wrapper
 
 	if !args.End() {
-		return nil, args.Error("Malformed spaceless-tag args.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed spaceless-tag args")
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {

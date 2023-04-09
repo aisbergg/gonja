@@ -3,42 +3,40 @@ package statements
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
-
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
+// ImportStmt is a statement that imports a template and makes its macros
+// available.
 type ImportStmt struct {
-	Location     *tokens.Token
+	Location     *parse.Token
 	Filename     string
-	FilenameExpr nodes.Expression
+	FilenameExpr parse.Expression
 	As           string
 	WithContext  bool
-	Template     *nodes.Template
+	Template     *parse.TemplateNode
 }
 
-func (stmt *ImportStmt) Position() *tokens.Token { return stmt.Location }
+// Position returns the position of the statement.
+func (stmt *ImportStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *ImportStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("ImportStmt(Line=%d Col=%d)", t.Line, t.Col)
 }
-func (stmt *ImportStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
-	var imported map[string]*nodes.Macro
+
+// Execute executes the import statement.
+func (stmt *ImportStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
+	var imported map[string]*parse.MacroNode
 	macros := map[string]exec.Macro{}
 
 	if stmt.FilenameExpr != nil {
-		filenameValue := r.Eval(stmt.FilenameExpr)
-		if filenameValue.IsError() {
-			return errors.Wrap(filenameValue, `Unable to evaluate filename`)
-		}
-
-		filename := filenameValue.String()
+		filename := r.Eval(stmt.FilenameExpr).String()
 		tpl, err := r.Loader.GetTemplate(filename)
 		if err != nil {
-			return errors.Wrapf(err, `Unable to load template '%s'`, filename)
+			errors.ThrowTemplateRuntimeError("unable to load template '%s': %s", filename, err)
 		}
 		imported = tpl.Root.Macros
 
@@ -47,45 +45,40 @@ func (stmt *ImportStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) err
 	}
 
 	for name, macro := range imported {
-		fn, err := exec.MacroNodeToFunc(macro, r)
-		if err != nil {
-			return errors.Wrapf(err, `Unable to import macro '%s'`, name)
-		}
+		fn := exec.MacroNodeToFunc(macro, r)
 		macros[name] = fn
 	}
 
 	r.Ctx.Set(stmt.As, macros)
-	return nil
 }
 
+// FromImportStmt is a statement that imports macros from another template.
 type FromImportStmt struct {
-	Location     *tokens.Token
+	Location     *parse.Token
 	Filename     string
-	FilenameExpr nodes.Expression
+	FilenameExpr parse.Expression
 	WithContext  bool
-	Template     *nodes.Template
+	Template     *parse.TemplateNode
 	As           map[string]string
-	Macros       map[string]*nodes.Macro // alias/name -> macro instance
+	Macros       map[string]*parse.MacroNode // alias/name -> macro instance
 }
 
-func (stmt *FromImportStmt) Position() *tokens.Token { return stmt.Location }
+// Position returns the position of the statement.
+func (stmt *FromImportStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *FromImportStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("FromImportStmt(Line=%d Col=%d)", t.Line, t.Col)
 }
-func (stmt *FromImportStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
-	var imported map[string]*nodes.Macro
+
+// Execute executes the import statement.
+func (stmt *FromImportStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	var imported map[string]*parse.MacroNode
 
 	if stmt.FilenameExpr != nil {
-		filenameValue := r.Eval(stmt.FilenameExpr)
-		if filenameValue.IsError() {
-			return errors.Wrap(filenameValue, `Unable to evaluate filename`)
-		}
-
-		filename := filenameValue.String()
+		filename := r.Eval(stmt.FilenameExpr).String()
 		tpl, err := r.Loader.GetTemplate(filename)
 		if err != nil {
-			return errors.Wrapf(err, `Unable to load template '%s'`, filename)
+			errors.ThrowTemplateRuntimeError("unable to load template '%s': %s", filename, err)
 		}
 		imported = tpl.Root.Macros
 
@@ -95,41 +88,34 @@ func (stmt *FromImportStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock)
 
 	for alias, name := range stmt.As {
 		node := imported[name]
-		fn, err := exec.MacroNodeToFunc(node, r)
-		if err != nil {
-			return errors.Wrapf(err, `Unable to import macro '%s'`, name)
-		}
+		fn := exec.MacroNodeToFunc(node, r)
 		r.Ctx.Set(alias, fn)
 	}
-	return nil
 }
 
-func importParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func importParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &ImportStmt{
 		Location: p.Current(),
-		// Macros:   map[string]*nodes.Macro{},
+		// Macros:   map[string]*parse.Macro{},
 	}
 
 	if args.End() {
-		return nil, args.Error("You must at least specify one macro to import.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "you must at least specify one macro to import.")
 	}
 
-	if tok := args.Match(tokens.String); tok != nil {
+	if tok := args.Match(parse.TokenString); tok != nil {
 		stmt.Filename = tok.Val
 	} else {
-		expr, err := args.ParseExpression()
-		if err != nil {
-			return nil, err
-		}
+		expr := args.ParseExpression()
 		stmt.FilenameExpr = expr
 	}
 	if args.MatchName("as") == nil {
-		return nil, args.Error(`Expected "as" keyword`, args.Current())
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected 'as' keyword, got '%s'", args.Current().Val)
 	}
 
-	alias := args.Match(tokens.Name)
+	alias := args.Match(parse.TokenName)
 	if alias == nil {
-		return nil, args.Error("Expected macro alias name (identifier)", args.Current())
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected macro alias name (identifier), got '%s'", args.Current().Val)
 	}
 	stmt.As = alias.Val
 
@@ -145,50 +131,47 @@ func importParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error
 	if stmt.Filename != "" {
 		tpl, err := p.TemplateParser(stmt.Filename)
 		if err != nil {
-			return nil, errors.Wrapf(err, `Unable to parse imported template '%s'`, stmt.Filename)
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unable to parse imported template '%s'", stmt.Filename)
 		}
 		stmt.Template = tpl
 	}
 
-	return stmt, nil
+	return stmt
 }
 
-func fromParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func fromParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &FromImportStmt{
 		Location: p.Current(),
 		As:       map[string]string{},
-		// Macros:   map[string]*nodes.Macro{},
+		// Macros:   map[string]*parse.Macro{},
 	}
 
 	if args.End() {
-		return nil, args.Error("You must at least specify one macro to import.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "you must at least specify one macro to import")
 	}
 
-	if tok := args.Match(tokens.String); tok != nil {
+	if tok := args.Match(parse.TokenString); tok != nil {
 		stmt.Filename = tok.Val
 	} else {
-		filename, err := args.ParseExpression()
-		if err != nil {
-			return nil, err
-		}
+		filename := args.ParseExpression()
 		stmt.FilenameExpr = filename
 	}
 
 	if args.MatchName("import") == nil {
-		return nil, args.Error("Expected import keyword", args.Current())
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected 'import' keyword, got '%s'", args.Current().Val)
 	}
 
 	for !args.End() {
-		name := args.Match(tokens.Name)
+		name := args.Match(parse.TokenName)
 		if name == nil {
-			return nil, args.Error("Expected macro name (identifier).", args.Current())
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected macro name (identifier), got '%s'", args.Current().Val)
 		}
 
 		// asName := macroNameToken.Val
 		if args.MatchName("as") != nil {
-			alias := args.Match(tokens.Name)
+			alias := args.Match(parse.TokenName)
 			if alias == nil {
-				return nil, args.Error("Expected macro alias name (identifier).", nil)
+				errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected macro alias name (identifier), got '%s'", args.Current().Val)
 			}
 			// asName = aliasToken.Val
 			stmt.As[alias.Val] = name.Val
@@ -216,8 +199,8 @@ func fromParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) 
 			break
 		}
 
-		if args.Match(tokens.Comma) == nil {
-			return nil, args.Error("Expected ','.", nil)
+		if args.Match(parse.TokenComma) == nil {
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unexpected '%s', expected ','", args.Current().Val)
 		}
 	}
 
@@ -225,12 +208,12 @@ func fromParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) 
 	if stmt.Filename != "" {
 		tpl, err := p.TemplateParser(stmt.Filename)
 		if err != nil {
-			return nil, errors.Wrapf(err, `Unable to parse imported template '%s'`, stmt.Filename)
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unable to parse imported template '%s'", stmt.Filename)
 		}
 		stmt.Template = tpl
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {

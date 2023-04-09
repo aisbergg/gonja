@@ -1,9 +1,8 @@
 package time
 
 import (
+	"github.com/aisbergg/gonja/pkg/gonja/ext"
 	arrow "github.com/bmuller/arrow/lib"
-
-	"github.com/aisbergg/gonja/pkg/gonja/config"
 )
 
 type Config struct {
@@ -20,7 +19,7 @@ func NewConfig() *Config {
 	}
 }
 
-func (cfg *Config) Inherit() config.Inheritable {
+func (cfg *Config) Inherit() ext.Inheritable {
 	return &Config{
 		DatetimeFormat: cfg.DatetimeFormat,
 		Now:            cfg.Now,

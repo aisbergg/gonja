@@ -5,55 +5,48 @@ import (
 	"math/rand"
 	"time"
 
-	// "github.com/pkg/errors"
-
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 	"github.com/aisbergg/gonja/pkg/gonja/utils"
-	"github.com/pkg/errors"
 )
 
 type LoremStmt struct {
-	Location *tokens.Token
+	Location *parse.Token
 	count    int    // number of paragraphs
 	method   string // w = words, p = HTML paragraphs, b = plain-text (default is b)
 	random   bool   // does not use the default paragraph "Lorem ipsum dolor sit amet, ..."
 }
 
-func (stmt *LoremStmt) Position() *tokens.Token { return stmt.Location }
+func (stmt *LoremStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *LoremStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("LoremStmt(Line=%d Col=%d)", t.Line, t.Col)
 }
 
-func (stmt *LoremStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
-	lorem, err := utils.Lorem(stmt.count, stmt.method)
+func (stmt *LoremStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
+	lorem, err := utils.LoremIpsum(stmt.count, stmt.method)
 	if err != nil {
-		return errors.Wrap(err, `Unable to execute 'lorem' statement`)
+		errors.ThrowTemplateRuntimeError("unable to execute 'lorem' statement: %s", err)
 	}
-	if _, err = r.WriteString(lorem); err != nil {
-		return errors.Wrap(err, `Unable to execute 'lorem' statement`)
-	}
-
-	return nil
+	r.WriteString(lorem)
 }
 
-func loremParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func loremParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &LoremStmt{
 		Location: p.Current(),
 		count:    1,
 		method:   "b",
 	}
 
-	if countToken := args.Match(tokens.Integer); countToken != nil {
+	if countToken := args.Match(parse.TokenInteger); countToken != nil {
 		stmt.count = exec.AsValue(countToken.Val).Integer()
 	}
 
-	if methodToken := args.Match(tokens.Name); methodToken != nil {
+	if methodToken := args.Match(parse.TokenName); methodToken != nil {
 		if methodToken.Val != "w" && methodToken.Val != "p" && methodToken.Val != "b" {
-			return nil, args.Error("lorem-method must be either 'w', 'p' or 'b'.", nil)
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "lorem-method must be either 'w', 'p' or 'b'")
 		}
 
 		stmt.method = methodToken.Val
@@ -64,10 +57,11 @@ func loremParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error)
 	}
 
 	if !args.End() {
-		return nil, args.Error("Malformed lorem-tag args.", nil)
+		// return nil, args.Error("Malformed lorem-tag args.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed lorem-tag args")
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {

@@ -4,92 +4,61 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
-	"github.com/pkg/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type WidthRatioStmt struct {
-	Location     *tokens.Token
-	current, max nodes.Expression
-	width        nodes.Expression
+	Location     *parse.Token
+	current, max parse.Expression
+	width        parse.Expression
 	ctxName      string
 }
 
-func (stmt *WidthRatioStmt) Position() *tokens.Token { return stmt.Location }
+func (stmt *WidthRatioStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *WidthRatioStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("WidthRatioStmt(Line=%d Col=%d)", t.Line, t.Col)
 }
 
-func (stmt *WidthRatioStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
+func (stmt *WidthRatioStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
 	current := r.Eval(stmt.current)
-	if current.IsError() {
-		return current
-	}
-
 	max := r.Eval(stmt.max)
-	if max.IsError() {
-		return max
-	}
-
 	width := r.Eval(stmt.width)
-	if width.IsError() {
-		return width
-	}
-
 	value := int(math.Ceil(current.Float()/max.Float()*width.Float() + 0.5))
-
 	if stmt.ctxName == "" {
-		if _, err := r.WriteString(fmt.Sprintf("%d", value)); err != nil {
-			return errors.Wrap(err, `Unable to execute 'widthratio' statement`)
-		}
+		r.WriteString(fmt.Sprintf("%d", value))
 	} else {
 		r.Ctx.Set(stmt.ctxName, value)
 	}
-
-	return nil
 }
 
-func widthratioParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func widthratioParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &WidthRatioStmt{
 		Location: p.Current(),
 	}
 
-	current, err := args.ParseExpression()
-	if err != nil {
-		return nil, err
-	}
-	stmt.current = current
-
-	max, err := args.ParseExpression()
-	if err != nil {
-		return nil, err
-	}
-	stmt.max = max
-
-	width, err := args.ParseExpression()
-	if err != nil {
-		return nil, err
-	}
-	stmt.width = width
+	stmt.current = args.ParseExpression()
+	stmt.max = args.ParseExpression()
+	stmt.width = args.ParseExpression()
 
 	if args.MatchName("as") != nil {
 		// Name follows
-		nameToken := args.Match(tokens.Name)
+		nameToken := args.Match(parse.TokenName)
 		if nameToken == nil {
-			return nil, args.Error("Expected name (identifier).", nil)
+			// return nil, args.Error("Expected name (identifier).", nil)
+			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected name (identifier)")
 		}
 		stmt.ctxName = nameToken.Val
 	}
 
 	if !args.End() {
-		return nil, args.Error("Malformed widthratio-tag args.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed widthratio-tag args")
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {

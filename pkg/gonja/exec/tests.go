@@ -1,9 +1,8 @@
 package exec
 
 import (
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 	"github.com/pkg/errors"
-
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
 )
 
 // TestFunction is the type test functions must fulfil
@@ -34,7 +33,7 @@ func (ts *TestSet) Register(name string, fn TestFunction) error {
 }
 
 // Replace replaces an already registered test with a new implementation. Use this
-// function with caution since it allows you to change existing test behaviour.
+// function with caution since it allows you to change existing test behavior.
 func (ts *TestSet) Replace(name string, fn TestFunction) error {
 	if !ts.Exists(name) {
 		return errors.Errorf("test with name '%s' does not exist (therefore cannot be overridden)", name)
@@ -50,35 +49,26 @@ func (ts *TestSet) Update(other TestSet) TestSet {
 	return *ts
 }
 
-func (e *Evaluator) EvalTest(expr *nodes.TestExpression) *Value {
+func (e *Evaluator) EvalTest(expr *parse.TestExpression) *Value {
 	value := e.Eval(expr.Expression)
 	// if value.IsError() {
-	// 	return AsValue(errors.Wrapf(value, `Unable to evaluate expresion %s`, expr.Expression))
+	// 	return AsValue(errors.Wrapf(value, "unable to evaluate expression %s", expr.Expression))
 	// }
 
 	return e.ExecuteTest(expr.Test, value)
 }
 
-func (e *Evaluator) ExecuteTest(tc *nodes.TestCall, v *Value) *Value {
-	params := &VarArgs{
-		Args:   []*Value{},
-		KwArgs: map[string]*Value{},
-	}
+func (e *Evaluator) ExecuteTest(tc *parse.TestCall, v *Value) *Value {
+	params := NewVarArgs()
 
 	for _, param := range tc.Args {
 		value := e.Eval(param)
-		if value.IsError() {
-			return AsValue(errors.Wrapf(value, `Unable to evaluate parameter %s`, param))
-		}
 		params.Args = append(params.Args, value)
 	}
 
 	for key, param := range tc.Kwargs {
 		value := e.Eval(param)
-		if value.IsError() {
-			return AsValue(errors.Wrapf(value, `Unable to evaluate parameter %s`, param))
-		}
-		params.KwArgs[key] = value
+		params.SetKwarg(key, value)
 	}
 
 	return e.ExecuteTestByName(tc.Name, v, params)
@@ -86,13 +76,13 @@ func (e *Evaluator) ExecuteTest(tc *nodes.TestCall, v *Value) *Value {
 
 func (e *Evaluator) ExecuteTestByName(name string, in *Value, params *VarArgs) *Value {
 	if !e.Tests.Exists(name) {
-		return AsValue(errors.Errorf(`Test "%s" not found`, name))
+		return AsValue(errors.Errorf("Test '%s' not found", name))
 	}
 	test := (*e.Tests)[name]
 
 	result, err := test(e.Ctx, in, params)
 	if err != nil {
-		return AsValue(errors.Wrapf(err, `Unable to execute test %s`, name))
+		return AsValue(errors.Wrapf(err, "unable to execute test '%s'", name))
 	}
 	return AsValue(result)
 }

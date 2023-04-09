@@ -20,12 +20,13 @@ import (
 )
 
 func TestEnv(root string) *gonja.Environment {
-	cfg := gonja.NewConfig()
-	cfg.KeepTrailingNewline = true
 	loader := loaders.MustNewFileSystemLoader(root)
-	env := gonja.NewEnvironment(cfg, loader)
-	env.Autoescape = true
-	env.Globals.Set("lorem", u.Lorem) // Predictable random content
+	env := gonja.NewEnvironment(
+		loader,
+		gonja.KeepTrailingNewline(),
+		gonja.Autoescape(),
+		gonja.SetGlobal("lorem", u.LoremIpsum), // Predictable random content
+	)
 	return env
 }
 
@@ -39,7 +40,7 @@ func GlobTemplateTests(t *testing.T, root string, env *gonja.Environment) {
 	for _, match := range matches {
 		filename, err := filepath.Rel(root, match)
 		if err != nil {
-			t.Fatalf("Unable to compute path from `%s`:\n%s", match, err.Error())
+			t.Fatalf("unable to compute path from `%s`:\n%s", match, err.Error())
 		}
 		testName := strings.Replace(path.Base(match), ".tpl", "", 1)
 		t.Run(testName, func(t *testing.T) {

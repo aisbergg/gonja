@@ -24,8 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 // type NodeStatement interface {
@@ -46,14 +45,14 @@ import (
 // See RegisterTag()'s documentation for more information about
 // writing a tag as well.
 
-// type StatementExecutor func(*nodes.Node, *ExecutionContext) *Value
+// type StatementExecutor func(*parse.Node, *ExecutionContext) *Value
 
 type Statement interface {
-	nodes.Statement
-	Execute(*Renderer, *nodes.StatementBlock) error
+	parse.Statement
+	Execute(*Renderer, *parse.StatementBlockNode)
 }
 
-type StatementSet map[string]parser.StatementParser
+type StatementSet map[string]parse.StatementParser
 
 // Exists returns true if the given test is already registered
 func (ss StatementSet) Exists(name string) bool {
@@ -61,45 +60,35 @@ func (ss StatementSet) Exists(name string) bool {
 	return existing
 }
 
-// Registers a new tag. You usually want to call this
-// function in the tag's init() function:
-// http://golang.org/doc/effective_go.html#init
-//
-// See http://www.florian-schlachter.de/post/gonja/ for more about
-// writing filters and tags.
-func (ss *StatementSet) Register(name string, parser parser.StatementParser) error {
+// Register registers a new tag. You usually want to call this function in the
+// tag's init() function: http://golang.org/doc/effective_go.html#init
+func (ss *StatementSet) Register(name string, parser parse.StatementParser) error {
 	if ss.Exists(name) {
 		return errors.Errorf("Statement '%s' is already registered", name)
 	}
 	(*ss)[name] = parser
-	// &statement{
-	// 	name:   name,
-	// 	parser: parserFn,
-	// }
 	return nil
 }
 
-// Registers a statement and panic on error
-func (ss *StatementSet) MustRegister(name string, parser parser.StatementParser) {
+// MustRegister is like Register but panics if the tag cannot be registered.
+func (ss *StatementSet) MustRegister(name string, parser parse.StatementParser) {
 	if err := ss.Register(name, parser); err != nil {
-		panic(fmt.Sprintf(`Unable to register '%s' statement: %s`, name, err))
+		panic(fmt.Sprintf("BUG: unable to register '%s' statement: %s", name, err))
 	}
 }
 
-// Replaces an already registered tag with a new implementation. Use this
-// function with caution since it allows you to change existing tag behaviour.
-func (ss *StatementSet) Replace(name string, parser parser.StatementParser) error {
+// Replace replaces an already registered tag with a new implementation. Use
+// this function with caution since it allows you to change existing tag
+// behavior.
+func (ss *StatementSet) Replace(name string, parser parse.StatementParser) error {
 	if !ss.Exists(name) {
 		return errors.Errorf("Statement '%s' does not exist (therefore cannot be overridden)", name)
 	}
 	(*ss)[name] = parser
-	// statements[name] = &statement{
-	// 	name:   name,
-	// 	parser: parserFn,
-	// }
 	return nil
 }
 
+// Update updates the statement set with the given statement set.
 func (ss *StatementSet) Update(other StatementSet) StatementSet {
 	for name, parser := range other {
 		(*ss)[name] = parser

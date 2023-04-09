@@ -3,87 +3,81 @@ package statements
 import (
 	"fmt"
 
-	log "github.com/sirupsen/logrus"
-
+	log "github.com/aisbergg/gonja/internal/log/parse"
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type IfStmt struct {
-	Location   *tokens.Token
-	conditions []nodes.Expression
-	wrappers   []*nodes.Wrapper
+	Location   *parse.Token
+	conditions []parse.Expression
+	wrappers   []*parse.WrapperNode
 }
 
-func (stmt *IfStmt) Position() *tokens.Token { return stmt.Location }
+func (stmt *IfStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *IfStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("IfStmt(Line=%d Col=%d)", t.Line, t.Col)
 }
 
-func (stmt *IfStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
+func (stmt *IfStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
 	for i, condition := range stmt.conditions {
 		result := r.Eval(condition)
-		if result.IsError() {
-			return result
-		}
 
 		if result.IsTrue() {
-			return r.ExecuteWrapper(stmt.wrappers[i])
-		}
-		// Last condition?
-		if len(stmt.conditions) == i+1 && len(stmt.wrappers) > i+1 {
-			return r.ExecuteWrapper(stmt.wrappers[i+1])
+			if err := r.ExecuteWrapper(stmt.wrappers[i]); err != nil {
+				panic(err)
+			}
+			return
 		}
 	}
-	return nil
+
+	// else block (has no condition)
+	if len(stmt.wrappers) > len(stmt.conditions) {
+		if err := r.ExecuteWrapper(stmt.wrappers[len(stmt.wrappers)-1]); err != nil {
+			panic(err)
+		}
+	}
 }
 
-func ifParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
-	log.WithFields(log.Fields{
-		"arg":     args.Current(),
-		"current": p.Current(),
-	}).Trace("ParseIf")
+func ifParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+	if log.Enabled {
+		fm := log.FuncMarker()
+		defer fm.End()
+	}
+	log.Print("parse: %s", p.Current())
+
 	ifNode := &IfStmt{
 		Location: args.Current(),
 	}
 
 	// Parse first and main IF condition
-	condition, err := args.ParseExpression()
-	if err != nil {
-		return nil, err
-	}
+	condition := args.ParseExpression()
 	ifNode.conditions = append(ifNode.conditions, condition)
 
 	if !args.End() {
-		return nil, args.Error("If-condition is malformed.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "if-condition is malformed")
 	}
 
 	// Check the rest
 	for {
-		wrapper, tagArgs, err := p.WrapUntil("elif", "else", "endif")
-		if err != nil {
-			return nil, err
-		}
+		wrapper, tagArgs := p.WrapUntil("elif", "else", "endif")
 		ifNode.wrappers = append(ifNode.wrappers, wrapper)
 
 		if wrapper.EndTag == "elif" {
 			// elif can take a condition
-			condition, err = tagArgs.ParseExpression()
-			if err != nil {
-				return nil, err
-			}
+			condition = tagArgs.ParseExpression()
 			ifNode.conditions = append(ifNode.conditions, condition)
 
 			if !tagArgs.End() {
-				return nil, tagArgs.Error("Elif-condition is malformed.", nil)
+				errors.ThrowSyntaxError(parse.AsErrorToken(tagArgs.Current()), "elif-condition is malformed")
 			}
 		} else {
 			if !tagArgs.End() {
 				// else/endif can't take any conditions
-				return nil, tagArgs.Error("Arguments not allowed here.", nil)
+				errors.ThrowSyntaxError(parse.AsErrorToken(tagArgs.Current()), "arguments not allowed here")
 			}
 		}
 
@@ -92,7 +86,8 @@ func ifParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
 		}
 	}
 
-	return ifNode, nil
+	log.Print("parsed expression: %s", ifNode)
+	return ifNode
 }
 
 func init() {

@@ -3,53 +3,51 @@ package statements
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
-
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type ExtendsStmt struct {
-	Location    *tokens.Token
+	Location    *parse.Token
 	Filename    string
 	WithContext bool
 }
 
-func (stmt *ExtendsStmt) Position() *tokens.Token { return stmt.Location }
+func (stmt *ExtendsStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *ExtendsStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("ExtendsStmt(Filename=%s Line=%d Col=%d)", stmt.Filename, t.Line, t.Col)
 }
 
 func (stmt *ExtendsStmt) Execute(r *exec.Renderer) error {
+	r.Current = stmt
 	return nil
 }
 
-func extendsParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func extendsParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &ExtendsStmt{
 		Location: p.Current(),
 	}
 
 	if p.Level > 1 {
-		return nil, args.Error(`The 'extends' statement can only be defined at root level`, p.Current())
+		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "the 'extends' statement can only be defined at root level")
 	}
 
 	if p.Template.Parent != nil {
-		return nil, args.Error("This template has already one parent.", args.Current())
+		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "this template has already one parent")
 	}
 
-	// var filename nodes.Node
-	if filename := args.Match(tokens.String); filename != nil {
+	// var filename parse.Node
+	if filename := args.Match(parse.TokenString); filename != nil {
 		stmt.Filename = filename.Val
 		tpl, err := p.TemplateParser(stmt.Filename)
 		if err != nil {
-			return nil, errors.Wrapf(err, `Unable to parse parent template '%s'`, stmt.Filename)
+			errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "unable to parse parent template '%s'", stmt.Filename)
 		}
 		p.Template.Parent = tpl
 	} else {
-		return nil, args.Error("Tag 'extends' requires a template filename as string.", args.Current())
+		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "tag 'extends' requires a template filename as string.")
 	}
 
 	if tok := args.MatchName("with", "without"); tok != nil {
@@ -61,10 +59,10 @@ func extendsParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, erro
 	}
 
 	if !args.End() {
-		return nil, args.Error("Tag 'extends' does only take 1 argument.", nil)
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "tag 'extends' does only take 1 argument.")
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {

@@ -3,51 +3,44 @@ package statements
 import (
 	"fmt"
 
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
-	"github.com/aisbergg/gonja/pkg/gonja/nodes"
-	"github.com/aisbergg/gonja/pkg/gonja/parser"
-	"github.com/aisbergg/gonja/pkg/gonja/tokens"
-	"github.com/pkg/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
 type RawStmt struct {
-	Data *nodes.Data
+	Data *parse.DataNode
 	// Content string
 }
 
-func (stmt *RawStmt) Position() *tokens.Token { return stmt.Data.Position() }
+func (stmt *RawStmt) Position() *parse.Token { return stmt.Data.Position() }
 func (stmt *RawStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("RawStmt(Line=%d Col=%d)", t.Line, t.Col)
 }
 
-func (stmt *RawStmt) Execute(r *exec.Renderer, tag *nodes.StatementBlock) error {
-	if _, err := r.WriteString(stmt.Data.Data.Val); err != nil {
-		return errors.Wrap(err, `Unable to execute raw statement`)
-	}
-	return nil
+func (stmt *RawStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
+	r.Current = stmt
+	r.WriteString(stmt.Data.Data.Val)
 }
 
-func rawParser(p *parser.Parser, args *parser.Parser) (nodes.Statement, error) {
+func rawParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt := &RawStmt{}
 
-	wrapper, _, err := p.WrapUntil("endraw")
-	if err != nil {
-		return nil, err
-	}
+	wrapper, _ := p.WrapUntil("endraw")
 	node := wrapper.Nodes[0]
-	data, ok := node.(*nodes.Data)
+	data, ok := node.(*parse.DataNode)
 	if ok {
 		stmt.Data = data
 	} else {
-		return nil, p.Error("raw statement can only contains a single data node", node.Position())
+		errors.ThrowSyntaxError(parse.AsErrorToken(node.Position()), "raw statement can only contains a single data node")
 	}
 
 	if !args.End() {
-		return nil, args.Error("raw statement doesn't accept parameters.", args.Current())
+		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "raw statement doesn't accept parameters.")
 	}
 
-	return stmt, nil
+	return stmt
 }
 
 func init() {
