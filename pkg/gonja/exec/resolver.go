@@ -10,16 +10,29 @@ import (
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
 )
 
+type CustomGetter func(value reflect.Value, key any) (ret reflect.Value, ok bool)
+
 // Resolver allows to resolve values from different types of variables.
 type Resolver struct {
 	// undefinedFunc is the function that is called when a value is not found.
 	undefinedFunc UndefinedFunc
+
+	// customGetters allows to add custom getters for types that are not
+	// supported by default. For example, if you want to resolve value from a
+	// custom ordered map type, you can add a custom getter for that.
+	customGetters map[reflect.Type]CustomGetter
+
+	// customGettersEnabled is true if at least one custom getter is registered.
+	customGettersEnabled bool
 }
 
 // NewResolver creates a new resolver.
-func NewResolver(undefined UndefinedFunc) *Resolver {
+func NewResolver(undefined UndefinedFunc, customGetters map[reflect.Type]CustomGetter) *Resolver {
+	customGettersEnabled := (customGetters != nil && len(customGetters) > 0)
 	return &Resolver{
-		undefinedFunc: undefined,
+		undefinedFunc:        undefined,
+		customGetters:        customGetters,
+		customGettersEnabled: customGettersEnabled,
 	}
 }
 
@@ -41,6 +54,17 @@ func (r *Resolver) Get(value *Value, key any) *Value {
 	typ := value.Val.Type()
 	if typ.Implements(undefinedType) {
 		return AsValue(value.Val.Interface().(Undefined).Get(key))
+	}
+
+	// try to use user defined custom getters
+	if r.customGettersEnabled {
+		if value, ok, usedGetter := r.getWithCustom(val, typ, key); usedGetter {
+			if ok {
+				return ToValue(value)
+			} else {
+				return toUndefinedValue(r.undefinedFunc(fmt.Sprintf("%s", key), ""))
+			}
+		}
 	}
 
 	var resVal reflect.Value
@@ -182,4 +206,17 @@ func getStructFields(structVal reflect.Value) map[string]structField {
 	structFieldsCache[typ] = structFlds
 
 	return structFlds
+}
+
+// getWithCustom uses the provided custom converters to copy the value.
+func (r *Resolver) getWithCustom(val reflect.Value, typ reflect.Type, key any) (ret reflect.Value, ok, usedGetter bool) {
+	if getter, ok := r.customGetters[typ]; ok {
+		ret, ok = getter(val, key)
+		return ret, ok, true
+	}
+	return
+}
+
+func (r *Resolver) IterateOrder(value *Value, fn func(idx, count int, key, value *Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
+
 }

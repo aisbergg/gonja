@@ -15,18 +15,18 @@ import (
 // others.
 type Environment struct {
 	*exec.EvalConfig
-	Loader loaders.Loader
+	loader loaders.Loader
 
-	Cache      map[string]*exec.Template
-	CacheMutex sync.Mutex
+	cache      map[string]*exec.Template
+	cacheMutex sync.Mutex
 }
 
 // NewEnvironment creates a new Environment instance.
 func NewEnvironment(loader loaders.Loader, options ...Option) *Environment {
 	env := &Environment{
 		EvalConfig: exec.NewEvalConfig(),
-		Loader:     loader,
-		Cache:      map[string]*exec.Template{},
+		loader:     loader,
+		cache:      map[string]*exec.Template{},
 	}
 	env.EvalConfig.Loader = env
 	env.Filters.Update(builtins.Filters)
@@ -36,6 +36,7 @@ func NewEnvironment(loader loaders.Loader, options ...Option) *Environment {
 		env.Globals[k] = v
 	}
 
+	// apply user options
 	for _, option := range options {
 		option(env)
 	}
@@ -46,25 +47,25 @@ func NewEnvironment(loader loaders.Loader, options ...Option) *Environment {
 // it will remove the template caches of those filenames.
 // Or it will empty the whole template cache. It is thread-safe.
 func (env *Environment) CleanCache(filenames ...string) {
-	env.CacheMutex.Lock()
-	defer env.CacheMutex.Unlock()
+	env.cacheMutex.Lock()
+	defer env.cacheMutex.Unlock()
 
 	if len(filenames) == 0 {
-		env.Cache = map[string]*exec.Template{}
+		env.cache = map[string]*exec.Template{}
 	}
 
 	for _, filename := range filenames {
-		delete(env.Cache, filename)
+		delete(env.cache, filename)
 	}
 }
 
 // FromCache is a convenient method to cache templates. It is thread-safe
 // and will only compile the template associated with a filename once.
 func (env *Environment) FromCache(filename string) (*exec.Template, error) {
-	env.CacheMutex.Lock()
-	defer env.CacheMutex.Unlock()
+	env.cacheMutex.Lock()
+	defer env.cacheMutex.Unlock()
 
-	tpl, has := env.Cache[filename]
+	tpl, has := env.cache[filename]
 
 	// Cache miss
 	if !has {
@@ -72,7 +73,7 @@ func (env *Environment) FromCache(filename string) (*exec.Template, error) {
 		if err != nil {
 			return nil, err
 		}
-		env.Cache[filename] = tpl
+		env.cache[filename] = tpl
 		return tpl, nil
 	}
 
@@ -92,7 +93,7 @@ func (env *Environment) FromBytes(tpl []byte) (*exec.Template, error) {
 
 // FromFile loads a template from a filename and returns a Template instance.
 func (env *Environment) FromFile(filename string) (*exec.Template, error) {
-	fd, err := env.Loader.Get(filename)
+	fd, err := env.loader.Get(filename)
 	if err != nil {
 		// TODO: return loader error
 		return nil, fmt.Errorf("error loading template %s: %w", filename, err)

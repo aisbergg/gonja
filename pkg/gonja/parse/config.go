@@ -4,19 +4,26 @@ package parse
 type Config struct {
 	// BlockStartString marks the beginning of a block. Defaults to '{%'
 	BlockStartString string
+
 	// BlockEndString marks the end of a block. Defaults to '%}'.
 	BlockEndString string
+
 	// VariableStartString marks the the beginning of a print statement. Defaults to '{{'.
 	VariableStartString string
+
 	// VariableEndString marks the end of a print statement. Defaults to '}}'.
 	VariableEndString string
+
 	// CommentStartString marks the beginning of a comment. Defaults to '{#'.
 	CommentStartString string
+
 	// CommentEndString marks the end of a comment. Defaults to '#}'.
 	CommentEndString string
+
 	// LineStatementPrefix will be used as prefix for line based statements, if
 	// given and a string.
 	LineStatementPrefix string
+
 	// LineCommentPrefix will be used as prefix for line based comments, if given
 	// and a string.
 	LineCommentPrefix string

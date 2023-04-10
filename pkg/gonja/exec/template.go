@@ -55,7 +55,7 @@ func NewTemplate(name string, source string, cfg *EvalConfig) (*Template, error)
 // execute executes the template with the given context and writes the rendered
 // template to out.
 func (tpl *Template) execute(ctx any, out io.StringWriter) (err error) {
-	resolver := NewResolver(tpl.Env.Undefined)
+	resolver := NewResolver(tpl.Env.Undefined, tpl.Env.CustomGetters)
 	rootCtx := NewContext(tpl.Env.Globals, ctx, resolver)
 	excCtx := rootCtx.Inherit()
 

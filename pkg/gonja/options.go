@@ -1,6 +1,8 @@
 package gonja
 
 import (
+	"reflect"
+
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 	"github.com/aisbergg/gonja/pkg/gonja/ext"
 )
@@ -154,5 +156,16 @@ func SetExtensionConfig(name string, config ext.Inheritable) Option {
 func SetGlobal(name string, value any) Option {
 	return func(cfg *Environment) {
 		cfg.Globals[name] = value
+	}
+}
+
+// SetCustomGetter sets a custom getter for resolving values from a custom type
+// that is not supported by default, e.g. a ordered map.
+func SetCustomGetter(typ reflect.Type, getter exec.CustomGetter) Option {
+	return func(cfg *Environment) {
+		if getter == nil {
+			return
+		}
+		cfg.CustomGetters[typ] = getter
 	}
 }

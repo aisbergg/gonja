@@ -99,7 +99,7 @@ func TestValueGetItem(t *testing.T) {
 }
 
 func getValue(val *exec.Value, key any) (*exec.Value, bool) {
-	resolver := exec.NewResolver(gonja.Undefined)
+	resolver := exec.NewResolver(gonja.Undefined, nil)
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(errors.TemplateRuntimeError); ok {
