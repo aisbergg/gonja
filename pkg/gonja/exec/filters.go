@@ -1,12 +1,13 @@
 package exec
 
 import (
+	"fmt"
+
 	"github.com/aisbergg/gonja/pkg/gonja/parse"
-	"github.com/pkg/errors"
 )
 
 // FilterFunction is the type filter functions must fulfil
-type FilterFunction func(e *Evaluator, in *Value, params *VarArgs) *Value
+type FilterFunction func(e *Evaluator, in Value, params *VarArgs) Value
 
 type FilterSet map[string]FilterFunction
 
@@ -25,7 +26,7 @@ func (fs FilterSet) Exists(name string) bool {
 // writing filters and tags.
 func (fs *FilterSet) Register(name string, fn FilterFunction) error {
 	if fs.Exists(name) {
-		return errors.Errorf("filter with name '%s' is already registered", name)
+		return fmt.Errorf("filter with name '%s' is already registered", name)
 	}
 	(*fs)[name] = fn
 	return nil
@@ -35,7 +36,7 @@ func (fs *FilterSet) Register(name string, fn FilterFunction) error {
 // function with caution since it allows you to change existing filter behavior.
 func (fs *FilterSet) Replace(name string, fn FilterFunction) error {
 	if !fs.Exists(name) {
-		return errors.Errorf("filter with name '%s' does not exist (therefore cannot be overridden)", name)
+		return fmt.Errorf("filter with name '%s' does not exist (therefore cannot be overridden)", name)
 	}
 	(*fs)[name] = fn
 	return nil
@@ -49,22 +50,17 @@ func (fs *FilterSet) Update(other FilterSet) FilterSet {
 }
 
 // EvaluateFiltered evaluates a filtered expression.
-func (e *Evaluator) EvaluateFiltered(expr *parse.FilteredExpression) *Value {
+func (e *Evaluator) EvaluateFiltered(expr *parse.FilteredExpression) Value {
 	value := e.Eval(expr.Expression)
-
 	for _, filter := range expr.Filters {
 		value = e.ExecuteFilter(filter, value)
 	}
-
-	// if value.IsError() {
-	// 	return AsValue(errors.Wrapf(value, "unable to filter chain", expr.Expression))
-	// }
 	return value
 }
 
 // ExecuteFilter execute a filter node
-func (e *Evaluator) ExecuteFilter(fc *parse.FilterCall, v *Value) *Value {
-	params := NewVarArgs()
+func (e *Evaluator) ExecuteFilter(fc *parse.FilterCall, v Value) Value {
+	params := NewVarArgs(e.ValueFactory)
 
 	for _, param := range fc.Args {
 		value := e.Eval(param)
@@ -79,9 +75,9 @@ func (e *Evaluator) ExecuteFilter(fc *parse.FilterCall, v *Value) *Value {
 }
 
 // ExecuteFilterByName execute a filter given its name
-func (e *Evaluator) ExecuteFilterByName(name string, in *Value, params *VarArgs) *Value {
+func (e *Evaluator) ExecuteFilterByName(name string, in Value, params *VarArgs) Value {
 	if !e.Filters.Exists(name) {
-		return AsValue(errors.Errorf("Filter '%s' not found", name))
+		return e.ValueFactory.NewValue(fmt.Errorf("Filter '%s' not found", name), false)
 	}
 	fn := (*e.Filters)[name]
 

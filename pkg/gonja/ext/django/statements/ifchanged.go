@@ -12,11 +12,14 @@ import (
 type IfChangedStmt struct {
 	Location    *parse.Token
 	watchedExpr []parse.Expression
-	lastValues  []*exec.Value
+	lastValues  []exec.Value
 	lastContent string
 	thenWrapper *parse.WrapperNode
 	elseWrapper *parse.WrapperNode
 }
+
+var _ parse.Statement = (*IfChangedStmt)(nil)
+var _ exec.Statement = (*IfChangedStmt)(nil)
 
 func (stmt *IfChangedStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *IfChangedStmt) String() string {
@@ -43,7 +46,7 @@ func (stmt *IfChangedStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNo
 			stmt.lastContent = str
 		}
 	} else {
-		nowValues := make([]*exec.Value, 0, len(stmt.watchedExpr))
+		nowValues := make([]exec.Value, 0, len(stmt.watchedExpr))
 		for _, expr := range stmt.watchedExpr {
 			val := r.Eval(expr)
 			nowValues = append(nowValues, val)
@@ -65,12 +68,14 @@ func (stmt *IfChangedStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNo
 			// Render thenWrapper
 			err := r.ExecuteWrapper(stmt.thenWrapper)
 			if err != nil {
+				// pass error up the call stack
 				panic(err)
 			}
 		} else {
 			// Render elseWrapper
 			err := r.ExecuteWrapper(stmt.elseWrapper)
 			if err != nil {
+				// pass error up the call stack
 				panic(err)
 			}
 		}
@@ -89,7 +94,7 @@ func ifchangedParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	}
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "ifchanged-arguments are malformed")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "ifchanged-arguments are malformed")
 	}
 
 	// Wrap then/else-blocks
@@ -97,7 +102,7 @@ func ifchangedParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt.thenWrapper = wrapper
 
 	if !endargs.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(endargs.Current()), "arguments not allowed here")
+		errors.ThrowSyntaxError(endargs.Current().ErrorToken(), "arguments not allowed here")
 	}
 
 	if wrapper.EndTag == "else" {
@@ -106,7 +111,7 @@ func ifchangedParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 		stmt.elseWrapper = wrapper
 
 		if !endargs.End() {
-			errors.ThrowSyntaxError(parse.AsErrorToken(endargs.Current()), "arguments not allowed here")
+			errors.ThrowSyntaxError(endargs.Current().ErrorToken(), "arguments not allowed here")
 		}
 	}
 

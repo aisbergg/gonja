@@ -2,12 +2,15 @@ package exec
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"strings"
 
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
+
+// TemplateLoadFn is a function that loads a template by name.
+type TemplateLoadFn func(name string) (*Template, error)
 
 // TemplateLoader is an interface for loading templates by name.
 type TemplateLoader interface {
@@ -20,7 +23,8 @@ type Template struct {
 	Reader io.Reader
 	Source string
 
-	Env    *EvalConfig
+	Env *EvalConfig
+	// XXX: needed?
 	Loader TemplateLoader
 
 	Tokens *parse.Stream
@@ -42,7 +46,7 @@ func NewTemplate(name string, source string, cfg *EvalConfig) (*Template, error)
 	// Parse it
 	t.Parser = parse.NewParser(cfg.Config, t.Tokens)
 	t.Parser.Statements = *t.Env.Statements
-	t.Parser.TemplateParser = t.Env.GetTemplate
+	t.Parser.TemplateParseFn = cfg.templateParseFn
 	root, err := t.Parser.Parse()
 	if err != nil {
 		return nil, err
@@ -55,19 +59,19 @@ func NewTemplate(name string, source string, cfg *EvalConfig) (*Template, error)
 // execute executes the template with the given context and writes the rendered
 // template to out.
 func (tpl *Template) execute(ctx any, out io.StringWriter) (err error) {
-	resolver := NewResolver(tpl.Env.Undefined, tpl.Env.CustomGetters)
-	rootCtx := NewContext(tpl.Env.Globals, ctx, resolver)
+	valueFactory := NewValueFactory(tpl.Env.Undefined, tpl.Env.CustomTypes)
+	rootCtx := NewContext(tpl.Env.Globals, ctx, valueFactory)
 	excCtx := rootCtx.Inherit()
 
 	var builder strings.Builder
-	renderer := NewRenderer(excCtx, resolver, &builder, tpl.Env, tpl)
+	renderer := NewRenderer(excCtx, valueFactory, &builder, tpl.Env, tpl)
 
 	err = renderer.Execute()
 	if err != nil {
-		return fmt.Errorf("failed to execute template: %w", err)
+		return err
 	}
 	if _, err = out.WriteString(renderer.String()); err != nil {
-		return fmt.Errorf("failed to write out template: %w", err)
+		return errors.NewTemplateRuntimeError("failed to write out template: %s", err)
 	}
 	return nil
 }

@@ -3,8 +3,6 @@ package exec
 import (
 	"reflect"
 
-	"github.com/pkg/errors"
-
 	"github.com/aisbergg/gonja/pkg/gonja/ext"
 	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
@@ -13,19 +11,20 @@ import (
 type EvalConfig struct {
 	*parse.Config
 
-	Globals    map[string]any
-	Filters    *FilterSet
-	Statements *StatementSet
-	Tests      *TestSet
-	Loader     TemplateLoader
+	Globals        map[string]any
+	Filters        *FilterSet
+	Statements     *StatementSet
+	Tests          *TestSet
+	TemplateLoadFn TemplateLoadFn
 
 	// ExtensionConfig stores configuration for extensions.
 	ExtensionConfig map[string]ext.Inheritable
 
-	// CustomGetters allows to add custom getters for types that are not
-	// supported by default. For example, if you want to resolve value from a
-	// custom ordered map type, you can add a custom getter for that.
-	CustomGetters map[reflect.Type]CustomGetter
+	// CustomTypes allows to add custom value representations for types that are
+	// not supported by default. For example, if you want to resolve value from
+	// a custom ordered map type, you can add a custom value representation for
+	// that and implement the [GetItem] method.
+	CustomTypes map[reflect.Type]ValueFunc
 
 	// Undefined is the type of undefined values that the resolver returns when
 	// a value is not found.
@@ -65,7 +64,7 @@ func NewEvalConfig() *EvalConfig {
 		Tests:      &TestSet{},
 
 		ExtensionConfig:     map[string]ext.Inheritable{},
-		CustomGetters:       map[reflect.Type]CustomGetter{},
+		CustomTypes:         map[reflect.Type]ValueFunc{},
 		Undefined:           NewUndefinedValue,
 		NewlineSequence:     "\n",
 		TrimBlocks:          false,
@@ -84,14 +83,14 @@ func (cfg EvalConfig) Inherit() *EvalConfig {
 	return &EvalConfig{
 		Config: cfg.Config.Inherit(),
 
-		Globals:    cfg.Globals,
-		Filters:    cfg.Filters,
-		Statements: cfg.Statements,
-		Tests:      cfg.Tests,
-		Loader:     cfg.Loader,
+		Globals:        cfg.Globals,
+		Filters:        cfg.Filters,
+		Statements:     cfg.Statements,
+		Tests:          cfg.Tests,
+		TemplateLoadFn: cfg.TemplateLoadFn,
 
 		ExtensionConfig:     extCfg,
-		CustomGetters:       cfg.CustomGetters,
+		CustomTypes:         cfg.CustomTypes,
 		Undefined:           cfg.Undefined,
 		NewlineSequence:     cfg.NewlineSequence,
 		TrimBlocks:          cfg.TrimBlocks,
@@ -101,11 +100,11 @@ func (cfg EvalConfig) Inherit() *EvalConfig {
 	}
 }
 
-// GetTemplate returns the template for the given filename.
-func (cfg *EvalConfig) GetTemplate(filename string) (*parse.TemplateNode, error) {
-	tpl, err := cfg.Loader.GetTemplate(filename)
+// templateParseFn returns the parsed template for the given filename.
+func (cfg *EvalConfig) templateParseFn(filename string) (*parse.TemplateNode, error) {
+	tpl, err := cfg.TemplateLoadFn(filename)
 	if err != nil {
-		return nil, errors.Wrapf(err, "unable to parse template '%s'", filename)
+		return nil, err
 	}
 	return tpl.Root, nil
 }

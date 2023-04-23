@@ -11,8 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pmezard/go-difflib/difflib"
-
+	"github.com/aisbergg/gonja/internal/diff"
 	"github.com/aisbergg/gonja/pkg/gonja"
 	"github.com/aisbergg/gonja/pkg/gonja/loaders"
 
@@ -20,12 +19,11 @@ import (
 )
 
 func TestEnv(root string) *gonja.Environment {
-	loader := loaders.MustNewFileSystemLoader(root)
 	env := gonja.NewEnvironment(
-		loader,
-		gonja.KeepTrailingNewline(),
-		gonja.Autoescape(),
-		gonja.SetGlobal("lorem", u.LoremIpsum), // Predictable random content
+		gonja.OptLoader(loaders.MustNewFileSystemLoader(root)),
+		gonja.OptKeepTrailingNewline(),
+		gonja.OptAutoescape(),
+		gonja.OptSetGlobal("lorem", u.LoremIpsum), // Predictable random content
 	)
 	return env
 }
@@ -50,7 +48,7 @@ func GlobTemplateTests(t *testing.T, root string, env *gonja.Environment) {
 				}
 			}()
 
-			rand.Seed(42) // Make tests deterministics
+			rand.Seed(42) // Make tests deterministic
 
 			tpl, err := env.FromFile(filename)
 			if err != nil {
@@ -67,16 +65,11 @@ func GlobTemplateTests(t *testing.T, root string, env *gonja.Environment) {
 			}
 			// rendered = testTemplateFixes.fixIfNeeded(filename, rendered)
 			if !bytes.Equal(expected, rendered) {
-				diff := difflib.UnifiedDiff{
-					A:        difflib.SplitLines(string(expected)),
-					B:        difflib.SplitLines(string(rendered)),
-					FromFile: "Expected",
-					ToFile:   "Rendered",
-					Context:  2,
-					Eol:      "\n",
+				d, err := diff.Diff([]byte(expected), []byte(rendered))
+				if err != nil {
+					t.Fatalf("failed to compute diff for %s:\n%s", testFilename, err.Error())
 				}
-				result, _ := difflib.GetUnifiedDiffString(diff)
-				t.Errorf("%s rendered with diff:\n%v", testFilename, result)
+				t.Errorf("%s rendered with diff:\n%v", testFilename, d)
 			}
 		})
 	}

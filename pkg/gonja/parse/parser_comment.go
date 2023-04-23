@@ -1,21 +1,21 @@
 package parse
 
 import (
-	log "github.com/aisbergg/gonja/internal/log/parse"
+	debug "github.com/aisbergg/gonja/internal/debug/parse"
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
 )
 
 // ParseComment parses a comment and returns a CommentNode.
 func (p *Parser) ParseComment() *CommentNode {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	tok := p.Match(TokenCommentBegin)
 	if tok == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s' , expected '%s'", p.Current(), p.Config.CommentStartString)
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s' , expected '%s'", p.Current(), p.Config.CommentStartString)
 	}
 
 	comment := &CommentNode{
@@ -32,10 +32,10 @@ func (p *Parser) ParseComment() *CommentNode {
 
 	tok = p.Match(TokenCommentEnd)
 	if tok == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s' , expected '%s'", p.Current(), p.Config.CommentEndString)
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s' , expected '%s'", p.Current(), p.Config.CommentEndString)
 	}
 	comment.End = tok
 
-	log.Print("parsed expression: %s", comment)
+	debug.Print("parsed expression: %s", comment)
 	return comment
 }

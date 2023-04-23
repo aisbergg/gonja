@@ -3,7 +3,7 @@ package statements
 import (
 	"fmt"
 
-	log "github.com/aisbergg/gonja/internal/log/parse"
+	debug "github.com/aisbergg/gonja/internal/debug/parse"
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 	"github.com/aisbergg/gonja/pkg/gonja/parse"
@@ -14,6 +14,9 @@ type IfStmt struct {
 	conditions []parse.Expression
 	wrappers   []*parse.WrapperNode
 }
+
+var _ parse.Statement = (*IfStmt)(nil)
+var _ exec.Statement = (*IfStmt)(nil)
 
 func (stmt *IfStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *IfStmt) String() string {
@@ -43,11 +46,11 @@ func (stmt *IfStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 }
 
 func ifParser(p *parse.Parser, args *parse.Parser) parse.Statement {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	ifNode := &IfStmt{
 		Location: args.Current(),
@@ -58,7 +61,7 @@ func ifParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	ifNode.conditions = append(ifNode.conditions, condition)
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "if-condition is malformed")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "if-condition is malformed")
 	}
 
 	// Check the rest
@@ -72,12 +75,12 @@ func ifParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 			ifNode.conditions = append(ifNode.conditions, condition)
 
 			if !tagArgs.End() {
-				errors.ThrowSyntaxError(parse.AsErrorToken(tagArgs.Current()), "elif-condition is malformed")
+				errors.ThrowSyntaxError(tagArgs.Current().ErrorToken(), "elif-condition is malformed")
 			}
 		} else {
 			if !tagArgs.End() {
 				// else/endif can't take any conditions
-				errors.ThrowSyntaxError(parse.AsErrorToken(tagArgs.Current()), "arguments not allowed here")
+				errors.ThrowSyntaxError(tagArgs.Current().ErrorToken(), "arguments not allowed here")
 			}
 		}
 
@@ -86,7 +89,7 @@ func ifParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 		}
 	}
 
-	log.Print("parsed expression: %s", ifNode)
+	debug.Print("parsed expression: %s", ifNode)
 	return ifNode
 }
 

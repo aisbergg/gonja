@@ -6,29 +6,54 @@ import (
 )
 
 var (
-	// DefaultLoader is being used by the DefaultSet.
-	DefaultLoader = loaders.MustNewFileSystemLoader("")
+	// DefaultEnv is an environment created for quick/standalone template
+	// rendering. It uses the NullLoader, which means that you can't use
+	// `include` or `extends` to load other templates.
+	DefaultEnv       = NewEnvironment()
+	fileSystemLoader = loaders.MustNewFileSystemLoader("")
 
-	// DefaultEnv is an environment created for quick/standalone template rendering.
-	DefaultEnv = NewEnvironment(DefaultLoader)
-
-	// Methods on the default set
+	// FromString is a quick way to parse a template from a string. The template
+	// doesn't allow any includes. If you want to use includes, create a custom
+	// environment with an appropriate loader.
 	FromString = DefaultEnv.FromString
-	FromBytes  = DefaultEnv.FromBytes
-	FromFile   = DefaultEnv.FromFile
-	FromCache  = DefaultEnv.FromCache
-
-	// Globals for the default set
-	Globals = DefaultEnv.Globals
+	// FromBytes is a quick way to parse a template from a byte slice. The
+	// template doesn't allow any includes. If you want to use includes, create
+	// a custom environment with an appropriate loader.
+	FromBytes = DefaultEnv.FromBytes
 )
+
+// FromFile is a quick way to parse a template from a file. The template doesn't
+// allow any includes. If you want to use includes, create a custom environment
+// with an appropriate loader.
+func FromFile(path string) (*exec.Template, error) {
+	return fileSystemLoader.Load(path, DefaultEnv.EvalConfig)
+}
 
 // Must panics, if a Template couldn't successfully parsed. This is how you
 // would use it:
 //
-//	var baseTemplate = gonja.Must(gonja.FromFile("templates/base.html"))
+//	var tpl = gonja.Must(gonja.FromFile("templates/base.html"))
 func Must(tpl *exec.Template, err error) *exec.Template {
 	if err != nil {
 		panic(err)
 	}
 	return tpl
 }
+
+// convenient interface to create a new UndefinedFunc
+var (
+	Undefined              exec.UndefinedFunc = exec.NewUndefinedValue
+	StrictUndefined        exec.UndefinedFunc = exec.NewStrictUndefinedValue
+	ChainedUndefined       exec.UndefinedFunc = exec.NewChainedUndefinedValue
+	ChainedStrictUndefined exec.UndefinedFunc = exec.NewChainedStrictUndefinedValue
+)
+
+// convenient interface to create a new Loaders
+var (
+	NullLoader                      = loaders.NewNullLoader
+	FileSystemLoader                = loaders.NewFileSystemLoader
+	MustFileSystemLoader            = loaders.MustNewFileSystemLoader
+	FileSystemLoaderWithOptions     = loaders.NewFileSystemLoaderWithOptions
+	MustFileSystemLoaderWithOptions = loaders.MustNewFileSystemLoaderWithOptions
+	CachedLoader                    = loaders.NewCachedLoader
+)

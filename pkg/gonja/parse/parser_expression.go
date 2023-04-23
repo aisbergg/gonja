@@ -1,17 +1,17 @@
 package parse
 
 import (
-	log "github.com/aisbergg/gonja/internal/log/parse"
+	debug "github.com/aisbergg/gonja/internal/debug/parse"
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
 )
 
 // ParseFilterExpression parses an optional filter expression.
 func (p *Parser) ParseFilterExpression(expr Expression) Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	if p.Peek(TokenPipe) != nil {
 		filtered := &FilteredExpression{
@@ -31,36 +31,36 @@ func (p *Parser) ParseFilterExpression(expr Expression) Expression {
 		expr = filtered
 	}
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return expr
 }
 
 // ParseExpression parses an expression.
 func (p *Parser) ParseExpression() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	expr := p.parseLogicalExpression()
 	expr = p.ParseFilterExpression(expr)
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return expr
 }
 
 // ParseExpressionNode parses an expression node.
 func (p *Parser) ParseExpressionNode() Node {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	tok := p.Match(TokenVariableBegin)
 	if tok == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s' , expected '{{'", p.Current())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s' , expected '{{'", p.Current())
 	}
 
 	node := &OutputNode{
@@ -72,17 +72,17 @@ func (p *Parser) ParseExpressionNode() Node {
 
 	expr := p.ParseExpression()
 	if expr == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected an expression")
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected an expression")
 	}
 	node.Expression = expr
 
 	tok = p.Match(TokenVariableEnd)
 	if tok == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s' , expected '}}'", p.Current())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s' , expected '}}'", p.Current())
 	}
 	node.End = tok
 	node.Trim.Right = tok.Val[0] == '-'
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return node
 }

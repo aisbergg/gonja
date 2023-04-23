@@ -10,7 +10,7 @@ import (
 
 type cycleValue struct {
 	node  *CycleStatement
-	value *exec.Value
+	value exec.Value
 }
 
 type CycleStatement struct {
@@ -20,6 +20,9 @@ type CycleStatement struct {
 	asName   string
 	silent   bool
 }
+
+var _ parse.Statement = (*CycleStatement)(nil)
+var _ exec.Statement = (*CycleStatement)(nil)
 
 func (stmt *CycleStatement) Position() *parse.Token { return stmt.position }
 func (stmt *CycleStatement) String() string {
@@ -81,7 +84,7 @@ func cycleParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 
 			name := args.Match(parse.TokenName)
 			if name == nil {
-				errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "name (identifier) expected after 'as'")
+				errors.ThrowSyntaxError(p.Current().ErrorToken(), "name (identifier) expected after 'as'")
 			}
 			cycleNode.asName = name.Val
 
@@ -95,7 +98,7 @@ func cycleParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	}
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "malformed cycle-tag")
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "malformed cycle-tag")
 	}
 
 	return cycleNode

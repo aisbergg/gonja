@@ -3,6 +3,7 @@ package statements
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
@@ -41,12 +42,12 @@ func loremParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	}
 
 	if countToken := args.Match(parse.TokenInteger); countToken != nil {
-		stmt.count = exec.AsValue(countToken.Val).Integer()
+		stmt.count, _ = strconv.Atoi(countToken.Val)
 	}
 
 	if methodToken := args.Match(parse.TokenName); methodToken != nil {
 		if methodToken.Val != "w" && methodToken.Val != "p" && methodToken.Val != "b" {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "lorem-method must be either 'w', 'p' or 'b'")
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "lorem-method must be either 'w', 'p' or 'b'")
 		}
 
 		stmt.method = methodToken.Val
@@ -58,7 +59,7 @@ func loremParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 
 	if !args.End() {
 		// return nil, args.Error("Malformed lorem-tag args.", nil)
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed lorem-tag args")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "malformed lorem-tag args")
 	}
 
 	return stmt

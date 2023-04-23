@@ -40,15 +40,15 @@ func templateTagParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	if argToken := args.Match(parse.TokenName); argToken != nil {
 		output, found := templateTagMapping[argToken.Val]
 		if !found {
-			errors.ThrowSyntaxError(parse.AsErrorToken(argToken), "argument not found")
+			errors.ThrowSyntaxError(argToken.ErrorToken(), "argument not found")
 		}
 		stmt.content = output
 	} else {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "identifier expected")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "identifier expected")
 	}
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed templatetag-tag argument")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "malformed templatetag-tag argument")
 	}
 
 	return stmt

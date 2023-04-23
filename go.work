@@ -1,0 +1,9 @@
+go 1.18
+
+use (
+	./
+	./benchmarks
+	./pkg/gonja/ext/ansible
+	./pkg/gonja/ext/django
+	./pkg/gonja/ext/time
+)

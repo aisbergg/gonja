@@ -1,7 +1,7 @@
 package parse
 
 import (
-	"github.com/pkg/errors"
+	"fmt"
 )
 
 type Visitor interface {
@@ -36,8 +36,9 @@ func Walk(v Visitor, node Node) error {
 	// 	return visitor.Data(t)
 	// case *Output:
 	// 	return visitor.Output(t)
+
 	default:
-		panic(errors.Errorf("cannot visit unknown node type %T", n))
+		panic(fmt.Errorf("[BUG] cannot visit unknown node type %T", n))
 	}
 
 	return nil

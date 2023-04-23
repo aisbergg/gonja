@@ -1,22 +1,22 @@
 package parse
 
 import (
-	log "github.com/aisbergg/gonja/internal/log/parse"
+	debug "github.com/aisbergg/gonja/internal/debug/parse"
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
 )
 
 // ParseFilter parses a filter.
 func (p *Parser) ParseFilter() *FilterCall {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 	identToken := p.Match(TokenName)
 
 	// Check filter ident
 	if identToken == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "filter name must be an identifier")
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "filter name must be an identifier")
 	}
 
 	filter := &FilterCall{
@@ -37,7 +37,7 @@ func (p *Parser) ParseFilter() *FilterCall {
 	// Check for filter-argument (2 tokens needed: ':' ARG)
 	if p.Match(TokenLparen) != nil {
 		if p.Peek(TokenVariableEnd) != nil {
-			errors.ThrowSyntaxError(AsErrorToken(p.Current()), "filter parameter required after '('")
+			errors.ThrowSyntaxError(p.Current().ErrorToken(), "filter parameter required after '('")
 		}
 
 		for p.Match(TokenComma) != nil || p.Match(TokenRparen) == nil {
@@ -53,6 +53,6 @@ func (p *Parser) ParseFilter() *FilterCall {
 		}
 	}
 
-	log.Print("parsed expression: %s", filter)
+	debug.Print("parsed expression: %s", filter)
 	return filter
 }

@@ -6,8 +6,8 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/aisbergg/gonja/internal/diff"
 	gonja "github.com/aisbergg/gonja/pkg/gonja"
-	"github.com/pmezard/go-difflib/difflib"
 
 	tu "github.com/aisbergg/gonja/pkg/gonja/testutils"
 )
@@ -38,10 +38,10 @@ func TestWhiteSpace(t *testing.T) {
 				}
 			}()
 			env := gonja.NewEnvironment(
-				gonja.DefaultLoader,
-				gonja.TrimBlocks(),
-				gonja.LstripBlocks(),
-				gonja.KeepTrailingNewline(),
+				gonja.OptLoader(gonja.MustFileSystemLoader("")),
+				gonja.OptTrimBlocks(),
+				gonja.OptLstripBlocks(),
+				gonja.OptKeepTrailingNewline(),
 			)
 
 			tpl, err := env.FromFile(source)
@@ -59,16 +59,11 @@ func TestWhiteSpace(t *testing.T) {
 			}
 			// rendered = testTemplateFixes.fixIfNeeded(match, rendered)
 			if !bytes.Equal(expected, rendered) {
-				diff := difflib.UnifiedDiff{
-					A:        difflib.SplitLines(string(expected)),
-					B:        difflib.SplitLines(string(rendered)),
-					FromFile: "Expected",
-					ToFile:   "Rendered",
-					Context:  2,
-					Eol:      "\n",
+				d, err := diff.Diff([]byte(expected), []byte(rendered))
+				if err != nil {
+					t.Fatalf("failed to compute diff for %s:\n%s", source, err.Error())
 				}
-				result, _ := difflib.GetUnifiedDiffString(diff)
-				t.Errorf("%s rendered with diff:\n%v", source, result)
+				t.Errorf("%s rendered with diff:\n%v", source, d)
 			}
 		})
 	}

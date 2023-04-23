@@ -49,13 +49,13 @@ func widthratioParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 		nameToken := args.Match(parse.TokenName)
 		if nameToken == nil {
 			// return nil, args.Error("Expected name (identifier).", nil)
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected name (identifier)")
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "expected name (identifier)")
 		}
 		stmt.ctxName = nameToken.Val
 	}
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed widthratio-tag args")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "malformed widthratio-tag args")
 	}
 
 	return stmt

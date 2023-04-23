@@ -6,8 +6,6 @@ import (
 	"math/rand"
 	"net/url"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // Ellipsis truncates a string to a given length and appends an ellipsis sign
@@ -122,7 +120,7 @@ func LoremIpsum(count int, method string) (string, error) {
 
 		}
 	default:
-		return "", errors.Errorf("unsupported method: %s", method)
+		return "", fmt.Errorf("unsupported method: %s", method)
 	}
 
 	return out.String(), nil

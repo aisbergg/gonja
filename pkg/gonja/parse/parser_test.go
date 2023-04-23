@@ -9,7 +9,6 @@ import (
 
 	"github.com/aisbergg/gonja/internal/testutils"
 	"github.com/aisbergg/gonja/pkg/gonja/parse"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
@@ -620,6 +619,7 @@ func (attrs attrs) assert(t *testing.T, value reflect.Value) {
 type slice []asserter
 
 func (slice slice) assert(t *testing.T, value reflect.Value) {
+	assert := testutils.NewAssert(t)
 	if assert.Equal(t, reflect.Slice, value.Kind()) {
 		if assert.Equal(t, len(slice), value.Len()) {
 			for idx, specs := range slice {

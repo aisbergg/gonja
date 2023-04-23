@@ -44,6 +44,13 @@ func (e *templateRuntimeError) Enrich(tk *Token) {
 	}
 }
 
+// NewTemplateRuntimeError creates a new TemplateRuntimeError.
+func NewTemplateRuntimeError(format string, args ...any) TemplateRuntimeError {
+	return &templateRuntimeError{
+		msg: fmt.Sprintf(format, args...),
+	}
+}
+
 // ThrowTemplateRuntimeError throws a generic template runtime error.
 func ThrowTemplateRuntimeError(format string, args ...any) {
 	panic(&templateRuntimeError{

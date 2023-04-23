@@ -10,6 +10,6 @@ var Filters = exec.FilterSet{
 	"type_debug": filterTypeDebug,
 }
 
-func filterTypeDebug(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	return exec.AsValue(in.Val.Type().String())
+func filterTypeDebug(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	return e.ValueFactory.NewValue(in.ReflectValue().Type().String(), false)
 }

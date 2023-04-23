@@ -12,10 +12,10 @@ type Parser struct {
 	Stream *Stream
 	Config *Config
 
-	Template       *TemplateNode
-	Statements     map[string]StatementParser
-	Level          int8
-	TemplateParser TemplateParser
+	Template        *TemplateNode
+	Statements      map[string]StatementParser
+	Level           int8
+	TemplateParseFn TemplateParseFn
 }
 
 // NewParser creates a new parser for the given token stream.
@@ -158,7 +158,7 @@ func (p *Parser) WrapUntil(names ...string) (*WrapperNode, *Parser) {
 						t := p.Next()
 						// p.Consume()
 						if t == nil {
-							errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected EOF")
+							errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected EOF")
 						}
 						args = append(args, t)
 					}
@@ -172,7 +172,7 @@ func (p *Parser) WrapUntil(names ...string) (*WrapperNode, *Parser) {
 		wrapper.Nodes = append(wrapper.Nodes, node)
 	}
 
-	errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected EOF, expected any of '%s'", strings.Join(names, " or "))
+	errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected EOF, expected any of '%s'", strings.Join(names, " or "))
 	return nil, nil
 }
 
@@ -213,11 +213,11 @@ func (p *Parser) SkipUntil(names ...string) {
 		}
 		t := p.Next()
 		if t == nil {
-			errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected EOF")
+			errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected EOF")
 		}
 	}
 
-	errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected EOF, expected any of '%s'", strings.Join(names, " or "))
+	errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected EOF, expected any of '%s'", strings.Join(names, " or "))
 }
 
 // -----------------------------------------------------------------------------

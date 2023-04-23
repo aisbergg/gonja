@@ -4,15 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
-	"regexp"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 	"unicode/utf8"
 
-	pkgerrors "github.com/pkg/errors"
-
-	log "github.com/aisbergg/gonja/internal/log/exec"
+	debug "github.com/aisbergg/gonja/internal/debug/exec"
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 	u "github.com/aisbergg/gonja/pkg/gonja/utils"
@@ -33,7 +31,6 @@ var Filters = exec.FilterSet{
 	"floatformat":        filterFloatformat,
 	"get_digit":          filterGetdigit,
 	"iriencode":          filterIriencode,
-	"length_is":          filterLengthis,
 	"linebreaks":         filterLinebreaks,
 	"linebreaksbr":       filterLinebreaksbr,
 	"linenumbers":        filterLinenumbers,
@@ -41,7 +38,6 @@ var Filters = exec.FilterSet{
 	"make_list":          filterMakelist,
 	"phone2numeric":      filterPhone2numeric,
 	"pluralize":          filterPluralize,
-	"removetags":         filterRemovetags,
 	"rjust":              filterRjust,
 	"split":              filterSplit,
 	"stringformat":       filterStringformat,
@@ -171,13 +167,35 @@ func filterTruncateHTMLHelper(value string, newOutput *bytes.Buffer, cond func()
 	}
 }
 
-func filterTruncatechars(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterTruncatechars(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: truncatechars(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("truncatechars(num_chars)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: truncatechars(%s)", p.String())
+
 	s := in.String()
-	newLen := params.Args[0].Integer()
-	return exec.AsValue(filterTruncatecharsHelper(s, newLen))
+	newLen := p.Args[0].Integer()
+	return e.ValueFactory.NewValue(filterTruncatecharsHelper(s, newLen), false)
 }
 
-func filterTruncatecharsHTML(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterTruncatecharsHTML(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: truncatechars_html(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("truncatechars_html(num_chars)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: truncatechars_html(%s)", p.String())
+
 	value := in.String()
 	newLen := u.Max(params.Args[0].Integer()-3, 0)
 
@@ -198,14 +216,25 @@ func filterTruncatecharsHTML(e *exec.Evaluator, in *exec.Value, params *exec.Var
 		}
 	})
 
-	return exec.AsSafeValue(newOutput.String())
+	return e.ValueFactory.NewValue(newOutput.String(), true)
 }
 
-func filterTruncatewords(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterTruncatewords(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: truncatewords(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("truncatewords(num_chars)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: truncatewords(%s)", p.String())
+
 	words := strings.Fields(in.String())
-	n := params.Args[0].Integer()
+	n := p.Args[0].Integer()
 	if n <= 0 {
-		return exec.AsValue("")
+		return e.ValueFactory.NewValue("", false)
 	}
 	nlen := u.Min(len(words), n)
 	out := make([]string, 0, nlen)
@@ -217,12 +246,23 @@ func filterTruncatewords(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs
 		out = append(out, "...")
 	}
 
-	return exec.AsValue(strings.Join(out, " "))
+	return e.ValueFactory.NewValue(strings.Join(out, " "), false)
 }
 
-func filterTruncatewordsHTML(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterTruncatewordsHTML(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: truncatewords_html(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("truncatewords_html(num_chars)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: truncatewords_html(%s)", p.String())
+
 	value := in.String()
-	newLen := u.Max(params.Args[0].Integer(), 0)
+	newLen := u.Max(p.Args[0].Integer(), 0)
 
 	newOutput := bytes.NewBuffer(nil)
 
@@ -268,106 +308,117 @@ func filterTruncatewordsHTML(e *exec.Evaluator, in *exec.Value, params *exec.Var
 		}
 	})
 
-	return exec.AsSafeValue(newOutput.String())
+	return e.ValueFactory.NewValue(newOutput.String(), true)
 }
 
-func filterEscapejs(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	sin := in.String()
-
-	var b bytes.Buffer
-
-	idx := 0
-	for idx < len(sin) {
-		c, size := utf8.DecodeRuneInString(sin[idx:])
-		if c == utf8.RuneError {
-			idx += size
-			continue
-		}
-
-		if c == '\\' {
-			// Escape seq?
-			if idx+1 < len(sin) {
-				switch sin[idx+1] {
-				case 'r':
-					b.WriteString(fmt.Sprintf(`\u%04X`, '\r'))
-					idx += 2
-					continue
-				case 'n':
-					b.WriteString(fmt.Sprintf(`\u%04X`, '\n'))
-					idx += 2
-					continue
-					/*case '\'':
-						b.WriteString(fmt.Sprintf(`\u%04X`, '\''))
-						idx += 2
-						continue
-					case '"':
-						b.WriteString(fmt.Sprintf(`\u%04X`, '"'))
-						idx += 2
-						continue*/
-				}
-			}
-		}
-
-		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == ' ' || c == '/' {
-			b.WriteRune(c)
-		} else {
-			b.WriteString(fmt.Sprintf(`\u%04X`, c))
-		}
-
-		idx += size
+func filterEscapejs(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
 	}
-
-	return exec.AsValue(b.String())
+	debug.Print("call filter with raw args: escapejs(%s)", params.String())
+	if p := params.ExpectNothing(); p.IsError() {
+		errors.ThrowFilterArgumentError("escapejs()", p.Error())
+	}
+	return e.ValueFactory.NewValue(template.JSEscapeString(in.String()), false)
 }
 
-func filterAdd(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	param := params.Args[0]
+func filterAdd(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: add(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("add(value)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: add(%s)", p.String())
+
+	param := p.Args[0]
 	if in.IsNumber() && param.IsNumber() {
 		if in.IsFloat() || param.IsFloat() {
-			return exec.AsValue(in.Float() + param.Float())
+			return e.ValueFactory.NewValue(in.Float()+param.Float(), false)
 		}
-		return exec.AsValue(in.Integer() + param.Integer())
+		return e.ValueFactory.NewValue(in.Integer()+param.Integer(), false)
 	}
 	// If in/param is not a number, we're relying on the
 	// Value's String() conversion and just add them both together
-	return exec.AsValue(in.String() + param.String())
+	return e.ValueFactory.NewValue(in.String()+param.String(), false)
 }
 
-func filterAddslashes(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterAddslashes(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: addslashes(%s)", params.String())
+	if p := params.ExpectNothing(); p.IsError() {
+		errors.ThrowFilterArgumentError("addslashes()", p.Error())
+	}
 	output := strings.Replace(in.String(), "\\", "\\\\", -1)
 	output = strings.Replace(output, "\"", "\\\"", -1)
 	output = strings.Replace(output, "'", "\\'", -1)
-	return exec.AsValue(output)
+	return e.ValueFactory.NewValue(output, false)
 }
 
-func filterCut(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	return exec.AsValue(strings.Replace(in.String(), params.Args[0].String(), "", -1))
+func filterCut(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: cut(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("cut(pattern)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: cut(%s)", p.String())
+
+	return e.ValueFactory.NewValue(strings.Replace(in.String(), params.Args[0].String(), "", -1), false)
 }
 
-func filterLengthis(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	return exec.AsValue(in.Len() == params.Args[0].Integer())
-}
+func filterDefaultIfNone(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: default_if_none(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("default_if_none(default_value)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: default_if_none(%s)", p.String())
 
-func filterDefaultIfNone(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if in.IsError() || in.IsNil() {
-		return params.Args[0]
+	if in.IsNil() {
+		return p.Args[0]
 	}
 	return in
 }
 
-func filterFloatformat(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterFloatformat(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: floatformat(%s)", params.String())
+	p := params.ExpectKwArgs([]*exec.Kwarg{{"format", nil}})
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("floatformat(format=nil)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: floatformat(%s)", p.String())
+
 	val := in.Float()
-	param := params.First()
+	format := p.GetKwarg("format")
 
 	decimals := -1
-	if !param.IsNil() {
+	if !format.IsNil() {
 		// Any argument provided?
-		decimals = param.Integer()
+		decimals = format.Integer()
 	}
 
 	// if the argument is not a number (e. g. empty), the default
 	// behavior is trim the result
-	trim := !param.IsNumber()
+	trim := !format.IsNumber()
 
 	if decimals <= 0 {
 		// argument is negative or zero, so we
@@ -379,75 +430,118 @@ func filterFloatformat(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) 
 	if trim {
 		// Remove zeroes
 		if float64(int(val)) == val {
-			return exec.AsValue(in.Integer())
+			return e.ValueFactory.NewValue(in.Integer(), false)
 		}
 	}
 
-	return exec.AsValue(strconv.FormatFloat(val, 'f', decimals, 64))
+	return e.ValueFactory.NewValue(strconv.FormatFloat(val, 'f', decimals, 64), false)
 }
 
-func filterGetdigit(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if log.Enabled {
-		fm := log.FuncMarker()
+func filterGetdigit(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("call filter with raw args: get_digit(%s)", params.String())
+	debug.Print("call filter with raw args: get_digit(%s)", params.String())
 	p := params.ExpectKwArgs([]*exec.Kwarg{
 		{"digit", nil},
 	})
 	if p.IsError() {
 		errors.ThrowFilterArgumentError("get_digit(digit=0)", p.Error())
 	}
-	log.Print("call filter with evaluated args: get_digit(%s)", p.String())
+	debug.Print("call filter with evaluated args: get_digit(%s)", p.String())
 
 	if !in.IsNumber() {
 		errors.ThrowFilterArgumentError("get_digit(digit=0)", "get_digit(digit=0) requires a number as input")
 	}
-	i := p.GetKwarg("digit", nil).Integer()
+	i := p.GetKwarg("digit").Integer()
 	s := in.String()
 	l := len(s)
 	if i <= 0 || i > l {
 		return in
 	}
 	n, _ := strconv.Atoi(s[i : i+1])
-	return exec.AsValue(n)
+	return e.ValueFactory.NewValue(n, false)
 }
 
-func filterIriencode(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	return exec.AsValue(u.IRIEncode(in.String()))
+func filterIriencode(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: iriencode(%s)", params.String())
+	if p := params.ExpectNothing(); p.IsError() {
+		errors.ThrowFilterArgumentError("iriencode()", p.Error())
+	}
+
+	return e.ValueFactory.NewValue(u.IRIEncode(in.String()), false)
 }
 
-func filterMakelist(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterMakelist(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: make_list(%s)", params.String())
+	if p := params.ExpectNothing(); p.IsError() {
+		errors.ThrowFilterArgumentError("make_list()", p.Error())
+	}
+
 	s := in.String()
 	result := make([]string, 0, len(s))
 	for _, c := range s {
 		result = append(result, string(c))
 	}
-	return exec.AsValue(result)
+	return e.ValueFactory.NewValue(result, false)
 }
 
-func filterCapfirst(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterCapfirst(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: capfirst(%s)", params.String())
+	if p := params.ExpectNothing(); p.IsError() {
+		errors.ThrowFilterArgumentError("capfirst()", p.Error())
+	}
+
 	if in.Len() <= 0 {
-		return exec.AsValue("")
+		return e.ValueFactory.NewValue("", false)
 	}
 	t := in.String()
 	r, size := utf8.DecodeRuneInString(t)
-	return exec.AsValue(strings.ToUpper(string(r)) + t[size:])
+	return e.ValueFactory.NewValue(strings.ToUpper(string(r))+t[size:], false)
 }
 
-func filterDate(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterDate(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: date(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("date(format)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: date(%s)", p.String())
+
 	t, isTime := in.Interface().(time.Time)
 	if !isTime {
-		return exec.AsValue(pkgerrors.New("filter input argument must be of type 'time.Time'"))
-		// return nil, &Error{
-		// 	Sender:    "filter:date",
-		// 	OrigError: errors.New("filter input argument must be of type 'time.Time'"),
-		// }
+		errors.ThrowFilterArgumentError("date", "filter input argument must be of type 'time.Time'")
 	}
-	return exec.AsValue(t.Format(params.Args[0].String()))
+	return e.ValueFactory.NewValue(t.Format(p.Args[0].String()), false)
 }
 
-func filterLinebreaks(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterLinebreaks(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: linebreaks(%s)", params.String())
+	if p := params.ExpectNothing(); p.IsError() {
+		errors.ThrowFilterArgumentError("linebreaks()", p.Error())
+	}
+
 	if in.Len() == 0 {
 		return in
 	}
@@ -488,38 +582,88 @@ func filterLinebreaks(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *
 		b.WriteString("</p>")
 	}
 
-	return exec.AsValue(b.String())
+	return e.ValueFactory.NewValue(b.String(), false)
 }
 
-func filterSplit(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterSplit(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: split(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("split(pattern)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: split(%s)", p.String())
+
 	chunks := strings.Split(in.String(), params.Args[0].String())
-
-	return exec.AsValue(chunks)
+	return e.ValueFactory.NewValue(chunks, false)
 }
 
-func filterLinebreaksbr(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	return exec.AsValue(strings.Replace(in.String(), "\n", "<br />", -1))
+func filterLinebreaksbr(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: linebreaksbr(%s)", params.String())
+	if p := params.ExpectNothing(); p.IsError() {
+		errors.ThrowFilterArgumentError("linebreaksbr()", p.Error())
+	}
+
+	return e.ValueFactory.NewValue(strings.Replace(in.String(), "\n", "<br />", -1), false)
 }
 
-func filterLinenumbers(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterLinenumbers(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: linenumbers(%s)", params.String())
+	if p := params.ExpectNothing(); p.IsError() {
+		errors.ThrowFilterArgumentError("linenumbers()", p.Error())
+	}
+
 	lines := strings.Split(in.String(), "\n")
 	output := make([]string, 0, len(lines))
 	for idx, line := range lines {
 		output = append(output, fmt.Sprintf("%d. %s", idx+1, line))
 	}
-	return exec.AsValue(strings.Join(output, "\n"))
+	return e.ValueFactory.NewValue(strings.Join(output, "\n"), false)
 }
 
-func filterLjust(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterLjust(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: split(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("split(pattern)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: split(%s)", p.String())
+
 	times := params.Args[0].Integer() - in.Len()
 	if times < 0 {
 		times = 0
 	}
-	return exec.AsValue(fmt.Sprintf("%s%s", in.String(), strings.Repeat(" ", times)))
+	return e.ValueFactory.NewValue(fmt.Sprintf("%s%s", in.String(), strings.Repeat(" ", times)), false)
 }
 
-func filterStringformat(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	return exec.AsValue(fmt.Sprintf(params.Args[0].String(), in.Interface()))
+func filterStringformat(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: stringformat(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("stringformat(format)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: stringformat(%s)", p.String())
+
+	return e.ValueFactory.NewValue(fmt.Sprintf(p.Args[0].String(), in.Interface()), false)
 }
 
 // https://en.wikipedia.org/wiki/Phoneword
@@ -529,103 +673,101 @@ var filterPhone2numericMap = map[string]string{
 	"w": "9", "x": "9", "y": "9", "z": "9",
 }
 
-func filterPhone2numeric(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
+func filterPhone2numeric(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: phone2numeric(%s)", params.String())
+	if p := params.ExpectNothing(); p.IsError() {
+		errors.ThrowFilterArgumentError("phone2numeric()", p.Error())
+	}
+
 	sin := in.String()
 	for k, v := range filterPhone2numericMap {
 		sin = strings.Replace(sin, k, v, -1)
 		sin = strings.Replace(sin, strings.ToUpper(k), v, -1)
 	}
-	return exec.AsValue(sin)
+	return e.ValueFactory.NewValue(sin, false)
 }
 
-func filterPluralize(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	param := params.First()
-	if in.IsNumber() {
-		// Works only on numbers
-		if param.Len() > 0 {
-			endings := strings.Split(param.String(), ",")
-			if len(endings) > 2 {
-				return exec.AsValue(pkgerrors.New("you cannot pass more than 2 arguments to filter 'pluralize'"))
-				// return nil, &Error{
-				// 	Sender:    "filter:pluralize",
-				// 	OrigError: errors.New("you cannot pass more than 2 arguments to filter 'pluralize'"),
-				// }
-			}
-			if len(endings) == 1 {
-				// 1 argument
-				if in.Integer() != 1 {
-					return exec.AsValue(endings[0])
-				}
-			} else {
-				if in.Integer() != 1 {
-					// 2 arguments
-					return exec.AsValue(endings[1])
-				}
-				return exec.AsValue(endings[0])
-			}
-		} else {
-			if in.Integer() != 1 {
-				// return default 's'
-				return exec.AsValue("s")
-			}
+func filterPluralize(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: pluralize(%s)", params.String())
+	p := params.ExpectKwArgs([]*exec.Kwarg{{"suffix", "s"}})
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("pluralize(suffix='s')", p.Error())
+	}
+	debug.Print("call filter with evaluated args: pluralize(%s)", p.String())
+
+	if !in.IsNumber() {
+		errors.ThrowFilterArgumentError("pluralize(suffix='s')", "only works on numbers")
+	}
+
+	suffix := p.GetKwarg("suffix").String()
+	endings := strings.Split(suffix, ",")
+	if len(endings) > 2 {
+		errors.ThrowFilterArgumentError("pluralize(suffix='s')", "only 2 endings are allowed, one for singular and one for plural")
+	}
+	if len(endings) == 2 {
+		if in.Integer() != 1 {
+			// ending for plural
+			return e.ValueFactory.NewValue(endings[1], false)
 		}
-
-		return exec.AsValue("")
-	}
-	// return nil, &Error{
-	// 	Sender:    "filter:pluralize",
-	// 	OrigError: errors.New("filter 'pluralize' does only work on numbers"),
-	// }
-	return exec.AsValue(pkgerrors.New("filter 'pluralize' does only work on numbers"))
-}
-
-func filterRemovetags(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	s := in.String()
-	tags := strings.Split(params.Args[0].String(), ",")
-
-	// Strip only specific tags
-	for _, tag := range tags {
-		re := regexp.MustCompile(fmt.Sprintf("</?%s/?>", tag))
-		s = re.ReplaceAllString(s, "")
+		return e.ValueFactory.NewValue(endings[0], false)
 	}
 
-	return exec.AsValue(strings.TrimSpace(s))
-}
-
-func filterRjust(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	return exec.AsValue(fmt.Sprintf(fmt.Sprintf("%%%ds", params.Args[0].Integer()), in.String()))
-}
-
-func filterYesno(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.Value {
-	if len(params.Args) > 1 {
-		// return nil, &Error{
-		// 	Sender:    "filter:getdigit",
-		// 	OrigError: errors.New("'getdigit' filter expect one and only one argument"),
-		// }
-		return exec.AsValue(pkgerrors.New("'getdigit' filter expect one and only one argument"))
+	// only plural ending is given
+	if in.Integer() != 1 {
+		return e.ValueFactory.NewValue(endings[0], false)
 	}
+	return e.ValueFactory.NewValue("", false)
+}
+
+func filterRjust(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: rjust(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("rjust(format)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: rjust(%s)", p.String())
+
+	return e.ValueFactory.NewValue(fmt.Sprintf(fmt.Sprintf("%%%ds", p.Args[0].Integer()), in.String()), false)
+}
+
+func filterYesno(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: yesno(%s)", params.String())
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("yesno(arg)", p.Error())
+	}
+	debug.Print("call filter with evaluated args: yesno(%s)", p.String())
+
 	choices := map[int]string{
 		0: "yes",
 		1: "no",
 		2: "maybe",
 	}
-	param := params.First()
+	param := p.Args[0]
 	paramString := param.String()
 	customChoices := strings.Split(paramString, ",")
 	if len(paramString) > 0 {
 		if len(customChoices) > 3 {
-			return exec.AsValue(pkgerrors.Errorf("You cannot pass more than 3 options to the 'yesno'-filter (got: '%s').", paramString))
-			// return nil, &Error{
-			// 	Sender:    "filter:yesno",
-			// 	OrigError: errors.Errorf("You cannot pass more than 3 options to the 'yesno'-filter (got: '%s').", paramString),
-			// }
+			errors.ThrowFilterArgumentError("yesno(arg)", "accepts only 3 options, got: '%s'.", paramString)
 		}
 		if len(customChoices) < 2 {
-			// return nil, &Error{
-			// 	Sender:    "filter:yesno",
-			// 	OrigError: errors.Errorf("You must pass either no or at least 2 arguments to the 'yesno'-filter (got: '%s').", paramString),
-			// }
-			return exec.AsValue(pkgerrors.Errorf("You must pass either no or at least 2 arguments to the 'yesno'-filter (got: '%s').", paramString))
+			errors.ThrowFilterArgumentError("yesno(arg)", "accepts no or at least 2 options, got: '%s'.", paramString)
 		}
 
 		// Map to the options now
@@ -638,14 +780,14 @@ func filterYesno(e *exec.Evaluator, in *exec.Value, params *exec.VarArgs) *exec.
 
 	// maybe
 	if in.IsNil() {
-		return exec.AsValue(choices[2])
+		return e.ValueFactory.NewValue(choices[2], false)
 	}
 
 	// yes
 	if in.IsTrue() {
-		return exec.AsValue(choices[0])
+		return e.ValueFactory.NewValue(choices[0], false)
 	}
 
 	// no
-	return exec.AsValue(choices[1])
+	return e.ValueFactory.NewValue(choices[1], false)
 }

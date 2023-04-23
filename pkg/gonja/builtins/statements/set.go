@@ -14,6 +14,9 @@ type SetStmt struct {
 	Expression parse.Expression
 }
 
+var _ parse.Statement = (*SetStmt)(nil)
+var _ exec.Statement = (*SetStmt)(nil)
+
 func (stmt *SetStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *SetStmt) String() string {
 	t := stmt.Position()
@@ -32,7 +35,7 @@ func (stmt *SetStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 
 	case *parse.GetItemNode:
 		target := r.Eval(n.Node)
-		target.Set(n.Arg, value.Interface())
+		target.SetItem(n.Arg, value.Interface())
 
 	default:
 		errors.ThrowTemplateRuntimeError("illegal set target node %s", n)
@@ -50,11 +53,11 @@ func setParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	case *parse.NameNode, *parse.CallNode, *parse.GetItemNode:
 		stmt.Target = n
 	default:
-		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "unexpected set target '%s'", n)
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected set target '%s'", n)
 	}
 
 	if args.Match(parse.TokenAssign) == nil {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unexpected '%s', expected '='", args.Current().Val)
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "unexpected '%s', expected '='", args.Current().Val)
 	}
 
 	// Variable expression
@@ -62,7 +65,7 @@ func setParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 
 	// Remaining arguments
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed 'set'-tag args")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "malformed 'set'-tag args")
 	}
 
 	return stmt

@@ -1,16 +1,16 @@
 package parse
 
 import (
-	log "github.com/aisbergg/gonja/internal/log/parse"
+	debug "github.com/aisbergg/gonja/internal/debug/parse"
 )
 
 // ParseMath parses a math expression.
 func (p *Parser) ParseMath() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	expr := p.parseConcat()
 	for p.Peek(TokenAdd, TokenSub) != nil {
@@ -33,17 +33,17 @@ func (p *Parser) ParseMath() Expression {
 		}
 	}
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return expr
 }
 
 // parseConcat parses a concatenation expression.
 func (p *Parser) parseConcat() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	expr := p.parseMathPrioritary()
 	for p.Peek(TokenTilde) != nil {
@@ -59,17 +59,17 @@ func (p *Parser) parseConcat() Expression {
 		}
 	}
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return expr
 }
 
 // parseMathPrioritary parses a math expression with priority.
 func (p *Parser) parseMathPrioritary() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	expr := p.parseUnary()
 
@@ -97,17 +97,17 @@ func (p *Parser) parseMathPrioritary() Expression {
 		}
 	}
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return expr
 }
 
 // parseUnary parses a unary expression.
 func (p *Parser) parseUnary() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	sign := p.Match(TokenAdd, TokenSub)
 	expr := p.parsePower()
@@ -120,17 +120,17 @@ func (p *Parser) parseUnary() Expression {
 		}
 	}
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return expr
 }
 
 // parsePower parses a power expression.
 func (p *Parser) parsePower() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	expr := p.ParseVariableOrLiteral()
 	for p.Peek(TokenPow) != nil {
@@ -146,6 +146,6 @@ func (p *Parser) parsePower() Expression {
 		}
 	}
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return expr
 }

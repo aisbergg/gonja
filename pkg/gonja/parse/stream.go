@@ -74,7 +74,7 @@ func NewStream(input any) *Stream {
 	case []*Token:
 		it = SliceIterator(t)
 	default:
-		panic(fmt.Errorf("BUG: unsupported stream input type '%T'", t))
+		panic(fmt.Errorf("[BUG] unsupported stream input type '%T'", t))
 	}
 
 	s := &Stream{
@@ -150,7 +150,7 @@ func (s *Stream) Peek() *Token {
 // Backup backs up the stream to the previous token.
 func (s *Stream) Backup() {
 	if s.previous == nil {
-		panic(fmt.Errorf("BUG: can't backup"))
+		panic(fmt.Errorf("[BUG] can't backup"))
 	}
 	s.backup = s.next
 	s.next = s.current

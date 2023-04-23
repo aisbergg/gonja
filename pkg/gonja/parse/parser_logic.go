@@ -1,7 +1,7 @@
 package parse
 
 import (
-	log "github.com/aisbergg/gonja/internal/log/parse"
+	debug "github.com/aisbergg/gonja/internal/debug/parse"
 )
 
 var compareOps = []TokenType{
@@ -12,21 +12,21 @@ var compareOps = []TokenType{
 
 // parseLogicalExpression parses a logical expression.
 func (p *Parser) parseLogicalExpression() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 	return p.parseOr()
 }
 
 // parseOr parses an 'or' expression.
 func (p *Parser) parseOr() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	expr := p.parseAnd()
 	for p.PeekName("or") != nil {
@@ -42,17 +42,17 @@ func (p *Parser) parseOr() Expression {
 		}
 	}
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return expr
 }
 
 // parseAnd parses an 'and' expression.
 func (p *Parser) parseAnd() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	expr := p.parseNot()
 	for p.PeekName("and") != nil {
@@ -68,17 +68,17 @@ func (p *Parser) parseAnd() Expression {
 		}
 	}
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return expr
 }
 
 // parseNot parses a 'not' expression.
 func (p *Parser) parseNot() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	op := p.MatchName("not")
 	expr := p.parseCompare()
@@ -90,17 +90,17 @@ func (p *Parser) parseNot() Expression {
 		}
 	}
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return expr
 }
 
 // parseCompare parses a comparison expression.
 func (p *Parser) parseCompare() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	expr := p.ParseMath()
 	for p.Peek(compareOps...) != nil || p.PeekName("in", "not") != nil {
@@ -140,6 +140,6 @@ func (p *Parser) parseCompare() Expression {
 
 	expr = p.ParseTest(expr)
 
-	log.Print("parsed expression: %s", expr)
+	debug.Print("parsed expression: %s", expr)
 	return expr
 }

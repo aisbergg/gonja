@@ -52,6 +52,8 @@ func (tpl *TemplateNode) String() string {
 
 // GetBlocks returns the blocks with the given name.
 func (tpl *TemplateNode) GetBlocks(name string) []*WrapperNode {
+	// need to render full template to populate context
+
 	var blocks []*WrapperNode
 	if tpl.Parent != nil {
 		blocks = tpl.Parent.GetBlocks(name)
@@ -129,7 +131,6 @@ func (expr *FilteredExpression) String() string {
 
 	return fmt.Sprintf("FilteredExpression(Expression=%s Line=%d Col=%d)",
 		expr.Expression, t.Line, t.Col)
-	// return fmt.Sprintf("<FilteredExpression Expression=%s", expr.Expression)
 }
 
 type FilterCall struct {
@@ -138,8 +139,6 @@ type FilterCall struct {
 	Name   string
 	Args   []Expression
 	Kwargs map[string]Expression
-
-	// filterFunc FilterFunction
 }
 
 type TestExpression struct {
@@ -152,8 +151,6 @@ func (expr *TestExpression) String() string {
 
 	return fmt.Sprintf("TestExpression(Expression=%s Test=%s Line=%d Col=%d)",
 		expr.Expression, expr.Test, t.Line, t.Col)
-	// return fmt.Sprintf("TestExpression(Expression=%s Test=%s)",
-	// 	expr.Expression, expr.Test)
 }
 func (expr *TestExpression) Position() *Token {
 	return expr.Expression.Position()
@@ -165,8 +162,6 @@ type TestCall struct {
 	Name   string
 	Args   []Expression
 	Kwargs map[string]Expression
-
-	// testFunc TestFunction
 }
 
 func (tc *TestCall) String() string {

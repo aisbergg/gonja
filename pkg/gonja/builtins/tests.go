@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 )
 
@@ -42,132 +43,172 @@ var Tests = exec.TestSet{
 	"upper":       testUpper,
 }
 
-func testCallable(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	return in.IsCallable(), nil
+// testCallable returns true if the input is a callable value.
+func testCallable(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	return in.IsCallable()
 }
 
-func testDefined(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	// XXX: implement properly
-	if _, ok := in.Interface().(exec.Undefined); ok {
-		return true, nil
+// testDefined returns true if the input is a defined value.
+func testDefined(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	if _, ok := in.(exec.Undefined); ok {
+		return true
 	}
-	return false, nil
+	return false
 }
 
-func testDivisibleby(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	param := params.First()
+// testDivisibleby returns true if the input is divisible by the given number.
+func testDivisibleby(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("divisibleby(value, num)", p.Error())
+	}
+	param := params.Args[0]
 	if param.Integer() == 0 {
-		return false, nil
+		return false
 	}
-	return in.Integer()%param.Integer() == 0, nil
+	return in.Integer()%param.Integer() == 0
 }
 
-func testEqual(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	param := params.First()
-	return in.Interface() == param.Interface(), nil
+func testEqual(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("eq(value, other)", p.Error())
+	}
+	param := params.Args[0]
+	return in.Interface() == param.Interface()
 }
 
-func testEven(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
+func testEven(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
 	if !in.IsInteger() {
-		return false, nil
+		return false
 	}
-	return in.Integer()%2 == 0, nil
+	return in.Integer()%2 == 0
 }
 
-func testGreaterEqual(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
+func testGreaterEqual(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("ge(value, other)", p.Error())
+	}
 	param := params.Args[0]
 	if !in.IsNumber() || !param.IsNumber() {
-		return false, nil
+		return false
 	}
-	return in.Float() >= param.Float(), nil
+	return in.Float() >= param.Float()
 }
 
-func testGreaterThan(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
+func testGreaterThan(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("gt(value, other)", p.Error())
+	}
 	param := params.Args[0]
 	if !in.IsNumber() || !param.IsNumber() {
-		return false, nil
+		return false
 	}
-	return in.Float() > param.Float(), nil
+	return in.Float() > param.Float()
 }
 
-func testIn(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	seq := params.First()
-	return seq.Contains(in), nil
+func testIn(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("in(value, seq)", p.Error())
+	}
+	seq := params.Args[0]
+	return seq.Contains(in)
 }
 
-func testIterable(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	return in.CanSlice(), nil
+func testIterable(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	return in.IsSliceable()
 }
 
-func testLessEqual(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
+func testLessEqual(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("le(value, other)", p.Error())
+	}
 	param := params.Args[0]
 	if !in.IsNumber() || !param.IsNumber() {
-		return false, nil
+		return false
 	}
-	return in.Float() <= param.Float(), nil
+	return in.Float() <= param.Float()
 }
 
-func testLower(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
+func testLower(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
 	if !in.IsString() {
-		return false, nil
+		return false
 	}
-	return strings.ToLower(in.String()) == in.String(), nil
+	return strings.ToLower(in.String()) == in.String()
 }
 
-func testLessThan(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
+func testLessThan(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("lt(value, other)", p.Error())
+	}
 	param := params.Args[0]
 	if !in.IsNumber() || !param.IsNumber() {
-		return false, nil
+		return false
 	}
-	return in.Float() < param.Float(), nil
+	return in.Float() < param.Float()
 }
 
-func testMapping(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	return in.IsDict(), nil
+func testMapping(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	return in.IsDict()
 }
 
-func testNotEqual(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
+func testNotEqual(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("ne(value, other)", p.Error())
+	}
 	param := params.Args[0]
-	return in.Interface() != param.Interface(), nil
+	return in.Interface() != param.Interface()
 }
 
-func testNone(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	return in.IsNil(), nil
+func testNone(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	return in.IsNil()
 }
 
-func testNumber(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	return in.IsNumber(), nil
+func testNumber(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	return in.IsNumber()
 }
 
-func testOdd(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
+func testOdd(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
 	if !in.IsInteger() {
-		return false, nil
+		return false
 	}
-	return in.Integer()%2 == 1, nil
+	return in.Integer()%2 == 1
 }
 
-func testSameas(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
+// testSameas returns true if the input points to the same memory address as the
+// other value.
+func testSameas(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	p := params.ExpectArgs(1)
+	if p.IsError() {
+		errors.ThrowFilterArgumentError("sameas(value, other)", p.Error())
+	}
 	param := params.Args[0]
 	if in.IsNil() && param.IsNil() {
-		return true, nil
-	} else if param.Val.CanAddr() && in.Val.CanAddr() {
-		return param.Val.Addr() == in.Val.Addr(), nil
+		return true
+	} else if param.ReflectValue().CanAddr() && in.ReflectValue().CanAddr() {
+		return param.ReflectValue().Addr() == in.ReflectValue().Addr()
 	}
-	return reflect.Indirect(param.Val) == reflect.Indirect(in.Val), nil
+	return reflect.Indirect(param.ReflectValue()) == reflect.Indirect(in.ReflectValue())
 }
 
-func testString(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	return in.IsString(), nil
+func testString(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	return in.IsString()
 }
 
-func testUndefined(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
-	defined, err := testDefined(ctx, in, params)
-	return !defined, err
+func testUndefined(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
+	defined := testDefined(ctx, in, params)
+	return !defined
 }
 
-func testUpper(ctx *exec.Context, in *exec.Value, params *exec.VarArgs) (bool, error) {
+func testUpper(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
 	if !in.IsString() {
-		return false, nil
+		return false
 	}
-	return strings.ToUpper(in.String()) == in.String(), nil
+	return strings.ToUpper(in.String()) == in.String()
 }

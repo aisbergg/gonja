@@ -3,17 +3,14 @@ package exec
 import (
 	"fmt"
 	"reflect"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
-	u "github.com/aisbergg/gonja/pkg/gonja/utils"
 )
 
 var (
-	rtUndefined = reflect.TypeOf((*Undefined)(nil)).Elem()
-	rtValue     = reflect.TypeOf((*Value)(nil))
+	rtValue = reflect.TypeOf((*Value)(nil)).Elem()
+	rtDict  = reflect.TypeOf(Dict{})
 )
 
 func indirectReflectValue(val reflect.Value) reflect.Value {
@@ -25,899 +22,263 @@ func indirectReflectValue(val reflect.Value) reflect.Value {
 
 // -----------------------------------------------------------------------------
 //
-// Value Container
+// Value Interface
 //
 // -----------------------------------------------------------------------------
 
-// Value is a container for values of various types.
-type Value struct {
-	// Val holds the actual value in form of a reflection value.
-	Val reflect.Value
+// Value is the interface that all value containers must implement. You can use
+// [BaseValue] as a base for your own value container implementations.
+type Value interface {
+	// IsString returns true if the value is a string, false otherwise.
+	IsString() bool
 
-	// IndVal holds the indirect (resolved) value . This is used to avoid
-	// resolving the pointer values more than once.
-	IndVal reflect.Value
+	// IsBool returns true if the value is a boolean, false otherwise.
+	IsBool() bool
 
-	// Safe indicates whether the value needs explicit escaping in the template
+	// IsFloat returns true if the value is a float, false otherwise.
+	IsFloat() bool
+
+	// IsInteger returns true if the value is an integer, false otherwise.
+	IsInteger() bool
+
+	// IsNumber returns true if the value is a number (integer or float), false
+	// otherwise.
+	IsNumber() bool
+
+	// IsList returns true if the value is a list or array, false otherwise.
+	IsList() bool
+
+	// IsDict returns true if the value is a dictionary or map, false otherwise.
+	IsDict() bool
+
+	// IsNil returns true if the value is nil or null, false otherwise.
+	IsNil() bool
+
+	// IsTrue returns true if the value is true, false otherwise.
+	IsTrue() bool
+
+	// IsSafe returns true if the value is safe for concurrent use, false
+	// otherwise.
+	IsSafe() bool
+
+	// IsCallable returns true if the value is a callable function or method,
+	// false otherwise.
+	IsCallable() bool
+
+	// IsIterable returns true if the value is iterable, false otherwise.
+	IsIterable() bool
+
+	// IsSliceable returns true if the value is sliceable, false otherwise.
+	IsSliceable() bool
+
+	// Interface returns the underlying value as an interface{}.
+	Interface() any
+
+	// ReflectValue returns the underlying reflect value.
+	ReflectValue() reflect.Value
+
+	// String returns the string representation of the value.
+	String() string
+
+	// Escaped returns the escaped string representation of the value.
+	Escaped() string
+
+	// Integer returns the integer representation of the value.
+	Integer() int
+
+	// Float returns the float representation of the value.
+	Float() float64
+
+	// Bool returns the boolean representation of the value.
+	Bool() bool
+
+	// Len returns the length of the value, if it's a list, dictionary, or
+	// string.
+	Len() int
+
+	// Slice returns a slice of the value, if it's a list or string, from index
+	// i to j.
+	Slice(i, j int) Value
+
+	// Index returns the value at the given index, if it's a list or string.
+	Index(i int) Value
+
+	// Contains returns true if the value contains the given value.
+	Contains(other Value) bool
+
+	// Keys returns the keys of the underlying map.
+	Keys() ValuesList
+
+	// Values returns the values of the underlying map.
+	Values() ValuesList
+
+	// Items returns the key-value pairs of the underlying map.
+	Items() []*Pair
+
+	// GetItem returns the value associated with the given key.
+	GetItem(key any) Value
+
+	// SetItem sets the value associated with the given key to the given value.
+	SetItem(key string, value any)
+
+	// Iterate iterates over the value's items, if it's a list or dictionary,
+	// and calls the provided function for each item. If the value is empty, the
+	// empty function is called instead.
+	Iterate(fn func(idx, count int, key, value Value) bool, empty func())
+
+	// IterateOrder iterates over the value's items, if it's a dictionary, in a
+	// specified order, and calls the provided function for each item. If the
+	// value is empty, the empty function is called instead. If reverse is true,
+	// the items are iterated in reverse order. If sorted is true, the items are
+	// sorted by key. If caseSensitive is true, the keys are compared
+	// case-sensitively.
+	IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool)
+
+	// EqualValueTo returns true if the value is equal to the other value, false
+	// otherwise.
+	EqualValueTo(other Value) bool
+}
+
+// ValueFunc is a function that creates a new value container.
+type ValueFunc func(value any, safe bool, valueFactory *ValueFactory) Value
+
+// -----------------------------------------------------------------------------
+//
+// BaseValue
+//
+// -----------------------------------------------------------------------------
+
+var _ Value = (*BaseValue)(nil)
+
+// BaseValue serves as a base for value containers.
+type BaseValue struct {
+	// valueFactory is used to create new [Value] containers.
+	valueFactory *ValueFactory
+
+	// isSafe indicates whether the value needs explicit escaping in the template
 	// or not.
-	Safe bool
-
-	// undefined indicates whether the value is undefined or not. It is used to
-	// avoid reevaluating the value and checking for undefinedness.
-	undefined bool
+	isSafe bool
 }
 
-// AsValue wraps a given value in a `Value` container. Usually being used within
-// functions passed to a template through a Context or within filter functions.
-func AsValue(val any) *Value {
-	if val == nil {
-		return &Value{
-			Val:    reflect.Value{},
-			IndVal: reflect.Value{},
-		}
-	}
-	refVal := reflect.ValueOf(val)
-	indVal := indirectReflectValue(refVal)
-	return &Value{
-		Val:    refVal,
-		IndVal: indVal,
+// NewBaseValue creates a new [BaseValue] container.
+func NewBaseValue(valueFactory *ValueFactory, isSafe bool) *BaseValue {
+	return &BaseValue{
+		valueFactory: valueFactory,
+		isSafe:       isSafe,
 	}
 }
 
-// AsSafeValue works like `AsValue`, but does not apply the `escape` filter.
-func AsSafeValue(i any) *Value {
-	if i == nil {
-		return &Value{
-			Val:    reflect.Value{},
-			IndVal: reflect.Value{},
-		}
-	}
-	refVal := reflect.ValueOf(i)
-	indVal := indirectReflectValue(refVal)
-	return &Value{
-		Val:    refVal,
-		IndVal: indVal,
-		Safe:   true,
-	}
+func (*BaseValue) IsString() bool {
+	return false
 }
-
-// ToValue returns a `Value` container. If the given value is already of type `Value`, then it is returned as is. If it is a `reflect.Value`, then it is wrapped in a `Value` container. All other types are wrapped directly in a `Value` container.
-func ToValue(val any) *Value {
-	// return an empty value if the given value is nil
-	if val == nil {
-		return &Value{
-			Val:    reflect.Value{},
-			IndVal: reflect.Value{},
-		}
-	}
-
-	// return the value as is, without wrapping it in another `Value` container
-	if v, ok := val.(*Value); ok {
-		return v
-	}
-
-	// all values are turned into a `reflect.Value` first, but if the given
-	// value is already a `reflect.Value`, then it is used directly
-	refVal := reflect.Value{}
-	if rv, ok := val.(reflect.Value); ok {
-		refVal = rv
-	} else {
-		refVal = reflect.ValueOf(val)
-	}
-	indVal := indirectReflectValue(refVal)
-	return &Value{
-		Val:    refVal,
-		IndVal: indVal,
-	}
+func (*BaseValue) IsBool() bool {
+	return false
 }
-
-// toUndefinedValue returns a `Value` container with the `Undefined` flag set to true.
-func toUndefinedValue(undVal Undefined) *Value {
-	return &Value{
-		Val:       reflect.ValueOf(undVal),
-		IndVal:    reflect.ValueOf(undVal),
-		undefined: true,
-	}
+func (*BaseValue) IsFloat() bool {
+	return false
 }
-
-// IsDefined reports whether the underlying value is defined.
-func (v *Value) IsDefined() bool {
-	return !v.undefined
+func (*BaseValue) IsInteger() bool {
+	return false
 }
-
-// IsString reports whether the underlying value is a string.
-func (v *Value) IsString() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).IsString()
-	}
-	return v.IndVal.IsValid() && v.IndVal.Kind() == reflect.String
+func (*BaseValue) IsNumber() bool {
+	return false
 }
-
-// IsBool reports whether the underlying value is a bool.
-func (v *Value) IsBool() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).IsBool()
-	}
-	return v.IndVal.IsValid() && v.IndVal.Kind() == reflect.Bool
+func (*BaseValue) IsList() bool {
+	return false
 }
-
-// IsFloat reports whether the underlying value is a float.
-func (v *Value) IsFloat() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).IsFloat()
-	}
-	return v.IndVal.IsValid() &&
-		(v.IndVal.Kind() == reflect.Float32 ||
-			v.IndVal.Kind() == reflect.Float64)
+func (*BaseValue) IsDict() bool {
+	return false
 }
-
-// IsInteger reports whether the underlying value is an integer.
-func (v *Value) IsInteger() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).IsInteger()
-	}
-	if !v.IndVal.IsValid() {
-		return false
-	}
-	kind := v.IndVal.Kind()
-	switch kind {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return true
-	default:
-		return false
-	}
+func (*BaseValue) IsNil() bool {
+	return false
 }
-
-// IsNumber reports whether the underlying value is either an integer or a
-// float.
-func (v *Value) IsNumber() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).IsNumber()
-	}
-	return v.IndVal.IsValid() && (v.IsInteger() || v.IsFloat())
+func (*BaseValue) IsTrue() bool {
+	return false
 }
-
-// IsCallable reports whether the underlying value is a callable function.
-func (v *Value) IsCallable() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).IsCallable()
-	}
-	return v.IndVal.IsValid() && v.IndVal.Kind() == reflect.Func
+func (v *BaseValue) IsSafe() bool {
+	return v.isSafe
 }
-
-// IsList reports whether the underlying value is a list.
-func (v *Value) IsList() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).IsList()
-	}
-	return v.IndVal.IsValid() &&
-		(v.IndVal.Kind() == reflect.Array ||
-			v.IndVal.Kind() == reflect.Slice)
+func (*BaseValue) IsCallable() bool {
+	return false
 }
-
-// IsDict reports whether the underlying value is a dictionary.
-func (v *Value) IsDict() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).IsDict()
-	}
-	return v.IndVal.IsValid() &&
-		(v.IndVal.Kind() == reflect.Map ||
-			(v.IndVal.Kind() == reflect.Struct && v.IndVal.Type() == TypeDict))
+func (*BaseValue) IsIterable() bool {
+	return false
 }
-
-// IsIterable reports whether the underlying value is an iterable type. Iterable
-// types are strings, lists and dictionaries.
-func (v *Value) IsIterable() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).IsIterable()
-	}
-	return v.IndVal.IsValid() && (v.IsString() || v.IsList() || v.IsDict())
+func (*BaseValue) IsSliceable() bool {
+	return false
 }
-
-// IsNil reports whether the underlying value is NIL.
-func (v *Value) IsNil() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).IsNil()
-	}
-	return !v.IndVal.IsValid()
+func (*BaseValue) Interface() any {
+	errors.ThrowTemplateRuntimeError("cannot convert value to interface")
+	return nil
 }
-
-// String returns a string for the underlying value. If this value is not of
-// type string, gonja tries to convert it. Currently the following types for
-// underlying values are supported:
-//
-//  1. string
-//  2. int/uint (any size)
-//  3. float (any precision)
-//  4. bool
-//  5. array/slice
-//  6. map
-//  7. String() will be called on the underlying value if provided
-//
-// NIL values will lead to an empty string. Unsupported types are leading to
-// their respective type name.
-func (v *Value) String() string {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).String()
-	}
-	if v.IsNil() {
-		return ""
-	}
-	resolved := v.IndVal
-
-	switch resolved.Kind() {
-	case reflect.String:
-		return resolved.String()
-
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return strconv.FormatInt(resolved.Int(), 10)
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return strconv.FormatUint(resolved.Uint(), 10)
-
-	case reflect.Float32, reflect.Float64:
-		formated := strconv.FormatFloat(resolved.Float(), 'f', 11, 64)
-		if !strings.Contains(formated, ".") {
-			formated = formated + "."
-		}
-		formated = strings.TrimRight(formated, "0")
-		if formated[len(formated)-1] == '.' {
-			formated += "0"
-		}
-		return formated
-
-	case reflect.Bool:
-		if v.Bool() {
-			return "True"
-		}
-		return "False"
-
-	case reflect.Struct:
-		if t, ok := v.Interface().(fmt.Stringer); ok {
-			return t.String()
-		}
-
-	case reflect.Slice, reflect.Array:
-		var out strings.Builder
-		length := v.Len()
-		out.WriteByte('[')
-		for i := 0; i < length; i++ {
-			if i > 0 {
-				out.WriteString(", ")
-			}
-			item := v.Index(i)
-			if item.IsString() {
-				out.WriteString(fmt.Sprintf(`'%s'`, item.String()))
-			} else {
-				out.WriteString(item.String())
-			}
-		}
-		out.WriteByte(']')
-		return out.String()
-
-	case reflect.Map:
-		pairs := []string{}
-		for _, key := range resolved.MapKeys() {
-			keyLabel := key.String()
-			if key.Kind() == reflect.String {
-				keyLabel = fmt.Sprintf(`'%s'`, keyLabel)
-			}
-
-			value := resolved.MapIndex(key)
-			// Check whether this is an interface and resolve it where required
-			for value.Kind() == reflect.Interface {
-				value = reflect.ValueOf(value.Interface())
-			}
-			valueLabel := value.String()
-			if value.Kind() == reflect.String {
-				valueLabel = fmt.Sprintf(`'%s'`, valueLabel)
-			}
-			pair := fmt.Sprintf(`%s: %s`, keyLabel, valueLabel)
-			pairs = append(pairs, pair)
-		}
-		sort.Strings(pairs)
-		return fmt.Sprintf("{%s}", strings.Join(pairs, ", "))
-
-	default:
-		errors.ThrowTemplateRuntimeError("Value.String() not implemented for type: %s", resolved.Kind().String())
-	}
-
+func (*BaseValue) ReflectValue() reflect.Value {
+	errors.ThrowTemplateRuntimeError("cannot get reflect value")
+	return reflect.Value{}
+}
+func (*BaseValue) String() string {
+	errors.ThrowTemplateRuntimeError("cannot convert value to string")
 	return ""
 }
-
-// Escaped returns the escaped version of String()
-func (v *Value) Escaped() string {
-	return u.HTMLEscape(v.String())
+func (*BaseValue) Escaped() string {
+	errors.ThrowTemplateRuntimeError("cannot convert value to string")
+	return ""
 }
-
-// Integer returns the underlying value as an integer (converts the underlying
-// value, if necessary). If it's not possible to convert the underlying value,
-// it will return 0.
-func (v *Value) Integer() int {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).Integer()
-	}
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil cannot be converted to integer")
-	}
-
-	switch v.IndVal.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return int(v.IndVal.Int())
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return int(v.IndVal.Uint())
-
-	case reflect.Float32, reflect.Float64:
-		return int(v.IndVal.Float())
-
-	case reflect.String:
-		// Try to convert from string to int (base 10)
-		f, err := strconv.ParseFloat(v.IndVal.String(), 64)
-		if err != nil {
-			return 0
-		}
-		return int(f)
-
-	default:
-		errors.ThrowTemplateRuntimeError("type %s cannot be converted to integer", v.IndVal.Kind().String())
-	}
-
+func (*BaseValue) Integer() int {
+	errors.ThrowTemplateRuntimeError("cannot convert value to integer")
 	return 0
 }
-
-// Float returns the underlying value as a float (converts the underlying
-// value, if necessary). If it's not possible to convert the underlying value,
-// it will return 0.0.
-func (v *Value) Float() float64 {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).Float()
-	}
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil cannot be converted to float")
-	}
-
-	switch v.IndVal.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return float64(v.IndVal.Int())
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return float64(v.IndVal.Uint())
-
-	case reflect.Float32, reflect.Float64:
-		return v.IndVal.Float()
-
-	case reflect.String:
-		// Try to convert from string to float64 (base 10)
-		f, err := strconv.ParseFloat(v.IndVal.String(), 64)
-		if err != nil {
-			return 0.0
-		}
-		return f
-
-	default:
-		errors.ThrowTemplateRuntimeError("type %s cannot be converted to float", v.IndVal.Kind().String())
-	}
-
-	return 0.0
-}
-
-// Bool returns the underlying value as bool. If the value is not bool, false
-// will always be returned. If you're looking for true/false-evaluation of the
-// underlying value, have a look on the IsTrue()-function.
-func (v *Value) Bool() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).Bool()
-	}
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil cannot be converted to bool")
-	}
-
-	switch v.IndVal.Kind() {
-	case reflect.Bool:
-		return v.IndVal.Bool()
-
-	default:
-		errors.ThrowTemplateRuntimeError("type %s cannot be converted to boolean", v.IndVal.Kind().String())
-	}
-
-	return false
-}
-
-// IsTrue tries to evaluate the underlying value the Pythonic-way:
-//
-// Returns TRUE in one the following cases:
-//
-//   - int != 0
-//   - uint != 0
-//   - float != 0.0
-//   - len(array/chan/map/slice/string) > 0
-//   - bool == true
-//   - underlying value is a struct
-//
-// Otherwise returns always FALSE.
-func (v *Value) IsTrue() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).IsTrue()
-	}
-	if v.IsNil() {
-		return false
-	}
-
-	switch v.IndVal.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.IndVal.Int() != 0
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return v.IndVal.Uint() != 0
-
-	case reflect.Float32, reflect.Float64:
-		return v.IndVal.Float() != 0
-
-	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
-		return v.IndVal.Len() > 0
-
-	case reflect.Bool:
-		return v.IndVal.Bool()
-
-	case reflect.Struct:
-		return true // struct instance is always true
-
-	default:
-		errors.ThrowTemplateRuntimeError("type %s cannot be evaluated to boolean", v.IndVal.Kind().String())
-	}
-
-	return false
-}
-
-// Len returns the length for an array, chan, map, slice or string. Otherwise it
-// will return 0.
-func (v *Value) Len() int {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).Len()
-	}
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil has no length")
-	}
-
-	switch v.IndVal.Kind() {
-	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice:
-		return v.IndVal.Len()
-
-	case reflect.String:
-		runes := []rune(v.IndVal.String())
-		return len(runes)
-
-	default:
-		errors.ThrowTemplateRuntimeError("type %s has no length", v.IndVal.Kind().String())
-	}
-
+func (*BaseValue) Float() float64 {
+	errors.ThrowTemplateRuntimeError("cannot convert value to float")
 	return 0
 }
-
-// Slice slices an array, slice or string. Otherwise it will return an empty
-// []int.
-func (v *Value) Slice(i, j int) *Value {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).Slice(i, j)
-	}
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil cannot be sliced")
-	}
-
-	switch v.IndVal.Kind() {
-	case reflect.Array, reflect.Slice:
-		return AsValue(v.IndVal.Slice(i, j).Interface())
-
-	case reflect.String:
-		runes := []rune(v.IndVal.String())
-		return AsValue(string(runes[i:j]))
-
-	default:
-		errors.ThrowTemplateRuntimeError("type %s cannot be sliced", v.IndVal.Kind().String())
-	}
-
-	return nil
-}
-
-// Index gets the i-th item of an array, slice or string. Otherwise it will
-// return NIL.
-func (v *Value) Index(i int) *Value {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).Index(i)
-	}
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil cannot be indexed")
-	}
-
-	switch v.IndVal.Kind() {
-	case reflect.Array, reflect.Slice:
-		if i >= v.Len() {
-			return AsValue(nil)
-		}
-		return AsValue(v.IndVal.Index(i).Interface())
-
-	case reflect.String:
-		//return AsValue(v.IndVal.Slice(i, i+1).Interface())
-		s := v.IndVal.String()
-		runes := []rune(s)
-		if i < len(runes) {
-			return AsValue(string(runes[i]))
-		}
-		return AsValue("")
-
-	default:
-		errors.ThrowTemplateRuntimeError("type %s cannot be indexed", v.IndVal.Kind().String())
-	}
-	return nil
-}
-
-// Contains reports whether the underlying value (which must be of type struct,
-// map, string, array or slice) contains of another Value (e. g. used to check
-// whether a struct contains of a specific field or a map contains a specific
-// key).
-//
-// Example:
-//
-//	AsValue("Hello, World!").Contains(AsValue("World")) == true
-func (v *Value) Contains(other *Value) bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).Contains(other)
-	}
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil cannot be checked for containment")
-	}
-
-	resolved := v.IndVal
-	switch resolved.Kind() {
-	case reflect.Struct:
-		if dict, ok := resolved.Interface().(Dict); ok {
-			return dict.Keys().Contains(other)
-		}
-		fldVal := resolved.FieldByName(other.String())
-		return fldVal.IsValid()
-
-	case reflect.Map:
-		var mapVal reflect.Value
-		// XXX: type checking required, key value must be of same type
-		switch other.Interface().(type) {
-		case int, string:
-			mapVal = resolved.MapIndex(other.IndVal)
-		default:
-			errors.ThrowTemplateRuntimeError("XXX")
-		}
-		return mapVal.IsValid()
-
-	case reflect.String:
-		return strings.Contains(resolved.String(), other.String())
-
-	case reflect.Slice, reflect.Array:
-		if vl, ok := resolved.Interface().(ValuesList); ok {
-			return vl.Contains(other)
-		}
-		for i := 0; i < resolved.Len(); i++ {
-			item := resolved.Index(i)
-			if other.Interface() == item.Interface() {
-				return true
-			}
-		}
-		return false
-
-	default:
-		errors.ThrowTemplateRuntimeError("type %s cannot be checked for containment", resolved.Kind().String())
-	}
-
+func (*BaseValue) Bool() bool {
+	errors.ThrowTemplateRuntimeError("cannot convert value to bool")
 	return false
 }
-
-// CanSlice reports whether the underlying value is of type array, slice or
-// string. You normally would use CanSlice() before using the Slice() operation.
-func (v *Value) CanSlice() bool {
-	if v.undefined {
-		return v.Val.Interface().(Undefined).CanSlice()
-	}
-	if v.IsNil() {
-		return false
-	}
-	switch v.IndVal.Kind() {
-	case reflect.Array, reflect.Slice, reflect.String:
-		return true
-	}
-	return false
+func (*BaseValue) Len() int {
+	errors.ThrowTemplateRuntimeError("cannot get length of value")
+	return 0
 }
-
-// Iterate iterates over a map, array, slice or a string. It calls the
-// function's first argument for every value with the following arguments:
-//
-//	idx      current 0-index
-//	count    total amount of items
-//	key      *Value for the key or item
-//	value    *Value (only for maps, the respective value for a specific key)
-//
-// If the underlying value has no items or is not one of the types above, the
-// empty function (function's second argument) will be called.
-func (v *Value) Iterate(fn func(idx, count int, key, value *Value) bool, empty func()) {
-	if v.undefined {
-		v.Val.Interface().(Undefined).Iterate(fn, empty)
-		return
-	}
-	v.IterateOrder(fn, empty, false, false, false)
-}
-
-// IterateOrder behaves like `Value.Iterate`, but can iterate through an
-// array/slice/string in reverse. Does not affect the iteration through a map
-// because maps don't have any particular order. However, you can force an order
-// using the `sorted` keyword (and even use `reversed sorted`).
-func (v *Value) IterateOrder(fn func(idx, count int, key, value *Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
-	if v.undefined {
-		v.Val.Interface().(Undefined).IterateOrder(fn, empty, reverse, sorted, caseSensitive)
-		return
-	}
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil cannot be iterated")
-	}
-
-	resolved := v.IndVal
-	switch resolved.Kind() {
-	case reflect.Map:
-		keys := resolved.MapKeys()
-		if sorted {
-			if reverse {
-				if !caseSensitive {
-					// XXX: needs to be implemented
-					sort.Sort(sort.Reverse(CaseInsensitive(sortRefelctValuesList(keys))))
-				} else {
-					sort.Sort(sort.Reverse(sortRefelctValuesList(keys)))
-				}
-			} else {
-				if !caseSensitive {
-					sort.Sort(CaseInsensitive(sortRefelctValuesList(keys)))
-				} else {
-					sort.Sort(sortRefelctValuesList(keys))
-				}
-			}
-		}
-		keyLen := len(keys)
-		for idx, key := range keys {
-			value := v.Val.MapIndex(key)
-			if !fn(idx, keyLen, AsValue(key), AsValue(value)) {
-				return
-			}
-		}
-		if keyLen == 0 {
-			empty()
-		}
-		return // done
-
-	case reflect.Array, reflect.Slice:
-		var items ValuesList
-
-		itemCount := resolved.Len()
-		for i := 0; i < itemCount; i++ {
-			items = append(items, ToValue(resolved.Index(i)))
-		}
-
-		if sorted {
-			if reverse {
-				if !caseSensitive && items[0].IsString() {
-					sort.Slice(items, func(i, j int) bool {
-						return strings.ToLower(items[i].String()) > strings.ToLower(items[j].String())
-					})
-				} else {
-					sort.Sort(sort.Reverse(items))
-				}
-			} else {
-				if !caseSensitive && items[0].IsString() {
-					sort.Slice(items, func(i, j int) bool {
-						return strings.ToLower(items[i].String()) < strings.ToLower(items[j].String())
-					})
-				} else {
-					sort.Sort(items)
-				}
-			}
-		} else {
-			if reverse {
-				for i := 0; i < itemCount/2; i++ {
-					items[i], items[itemCount-1-i] = items[itemCount-1-i], items[i]
-				}
-			}
-		}
-
-		if len(items) > 0 {
-			for idx, item := range items {
-				if !fn(idx, itemCount, item, nil) {
-					return
-				}
-			}
-		} else {
-			empty()
-		}
-		return // done
-
-	case reflect.String:
-		if sorted {
-			r := []rune(resolved.String())
-			if caseSensitive {
-				sort.Sort(sortRunes(r))
-			} else {
-				sort.Sort(CaseInsensitive(sortRunes(r)))
-			}
-			resolved = reflect.ValueOf(string(r))
-		}
-
-		// TODO(flosch): Not utf8-compatible (utf8-decoding necessary)
-		charCount := resolved.Len()
-		if charCount > 0 {
-			if reverse {
-				for i := charCount - 1; i >= 0; i-- {
-					if !fn(i, charCount, ToValue(resolved.Slice(i, i+1)), nil) {
-						return
-					}
-				}
-			} else {
-				for i := 0; i < charCount; i++ {
-					if !fn(i, charCount, ToValue(resolved.Slice(i, i+1)), nil) {
-						return
-					}
-				}
-			}
-		} else {
-			empty()
-		}
-		return // done
-
-	case reflect.Chan:
-		items := []reflect.Value{}
-		for {
-			value, ok := resolved.Recv()
-			if !ok {
-				break
-			}
-			items = append(items, value)
-		}
-		count := len(items)
-		if count > 0 {
-			for idx, value := range items {
-				fn(idx, count, ToValue(value), nil)
-			}
-		} else {
-			empty()
-		}
-		return
-
-	case reflect.Struct:
-		if resolved.Type() != TypeDict {
-			errors.ThrowTemplateRuntimeError("Value.Iterate() not available for type: %s", resolved.Kind().String())
-		}
-		dict := resolved.Interface().(Dict)
-		keys := dict.Keys()
-		length := len(dict.Pairs)
-		if sorted {
-			if reverse {
-				if !caseSensitive {
-					sort.Sort(sort.Reverse(CaseInsensitive(keys)))
-				} else {
-					sort.Sort(sort.Reverse(keys))
-				}
-			} else {
-				if !caseSensitive {
-					sort.Sort(CaseInsensitive(keys))
-				} else {
-					sort.Sort(keys)
-				}
-			}
-		}
-		if len(keys) > 0 {
-			for idx, key := range keys {
-				if !fn(idx, length, key, dict.Get(key)) {
-					return
-				}
-			}
-		} else {
-			empty()
-		}
-
-	default:
-		errors.ThrowTemplateRuntimeError("type %s cannot be iterated", resolved.Kind().String())
-	}
-
-	empty()
-}
-
-// Interface returns the underlying value as an interface{}.
-func (v *Value) Interface() any {
-	if v.Val.IsValid() {
-		return v.Val.Interface()
-	}
+func (*BaseValue) Slice(i, j int) Value {
+	errors.ThrowTemplateRuntimeError("cannot slice value")
 	return nil
 }
-
-// EqualValueTo reports whether two values are containing the same value or
-// object.
-func (v *Value) EqualValueTo(other *Value) bool {
-	// comparison of uint with int fails using .Interface()-comparison (see issue #64)
-	if v.IsInteger() && other.IsInteger() {
-		return v.Integer() == other.Integer()
-	}
-	return v.Interface() == other.Interface()
+func (*BaseValue) Index(i int) Value {
+	errors.ThrowTemplateRuntimeError("cannot index value")
+	return nil
 }
-
-// Keys returns a list of keys contained in v.
-func (v *Value) Keys() ValuesList {
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("cannot get keys from nil value")
-	}
-
-	keys := ValuesList{}
-	resolved := v.IndVal
-	if resolved.Type() == TypeDict {
-		for _, pair := range resolved.Interface().(Dict).Pairs {
-			keys = append(keys, pair.Key)
-		}
-		return keys
-	} else if resolved.Kind() != reflect.Map {
-		return keys
-	}
-	for _, key := range resolved.MapKeys() {
-		keys = append(keys, ToValue(key))
-	}
-	sort.Sort(CaseInsensitive(keys))
-	return keys
+func (*BaseValue) Contains(other Value) bool {
+	errors.ThrowTemplateRuntimeError("cannot check if value contains another value")
+	return false
 }
-
-// Items returns a list items contained in v.
-func (v *Value) Items() []*Pair {
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("cannot get items from nil value")
-	}
-
-	out := []*Pair{}
-	resolved := v.IndVal
-	if resolved.Kind() != reflect.Map {
-		return out
-	}
-	iter := resolved.MapRange()
-	for iter.Next() {
-		out = append(out, &Pair{
-			Key:   ToValue(iter.Key()),
-			Value: ToValue(iter.Value()),
-		})
-	}
-	return out
+func (*BaseValue) Keys() ValuesList {
+	errors.ThrowTemplateRuntimeError("cannot get keys of value")
+	return nil
 }
-
-// XXX: need to work on that
-func (v *Value) Set(key string, value interface{}) {
-	if v.undefined {
-		v.Val.Interface().(Undefined).Set(key, value)
-		return
-	}
-	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("can't set attribute or item on nil value")
-	}
-	val := v.Val
-	for val.Kind() == reflect.Ptr {
-		val = val.Elem()
-		if !val.IsValid() {
-			errors.ThrowTemplateRuntimeError("invalid value '%s'", val)
-		}
-	}
-
-	switch val.Kind() {
-	case reflect.Struct:
-		field := val.FieldByName(key)
-		if !(field.IsValid() && field.CanSet()) {
-			errors.ThrowTemplateRuntimeError("can't write field '%s'", key)
-		}
-		field.Set(reflect.ValueOf(value))
-
-	case reflect.Map:
-		val.SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(value))
-
-	default:
-		errors.ThrowTemplateRuntimeError("can't set attribute or item on type '%s'", val.Kind())
-	}
+func (*BaseValue) Values() ValuesList {
+	errors.ThrowTemplateRuntimeError("cannot get values of value")
+	return nil
+}
+func (*BaseValue) Items() []*Pair {
+	errors.ThrowTemplateRuntimeError("cannot get items of value")
+	return nil
+}
+func (*BaseValue) GetItem(key any) Value {
+	errors.ThrowTemplateRuntimeError("cannot set value")
+	return nil
+}
+func (*BaseValue) SetItem(key string, value any) {
+	errors.ThrowTemplateRuntimeError("cannot set value")
+}
+func (*BaseValue) Iterate(fn func(idx, count int, key, value Value) bool, empty func()) {
+	errors.ThrowTemplateRuntimeError("cannot iterate over value")
+}
+func (*BaseValue) IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
+	errors.ThrowTemplateRuntimeError("cannot iterate over value")
+}
+func (*BaseValue) EqualValueTo(other Value) bool {
+	errors.ThrowTemplateRuntimeError("cannot compare values")
+	return false
 }
 
 // -----------------------------------------------------------------------------
@@ -926,8 +287,8 @@ func (v *Value) Set(key string, value interface{}) {
 //
 // -----------------------------------------------------------------------------
 
-// ValuesList represents a list of `Value`s.
-type ValuesList []*Value
+// ValuesList represents a list of [Value]s.
+type ValuesList []Value
 
 // Len is the number of elements in the collection.
 func (vl ValuesList) Len() int {
@@ -976,7 +337,7 @@ func (vl ValuesList) String() string {
 }
 
 // Contains reports whether a value is within vl.
-func (vl ValuesList) Contains(value *Value) bool {
+func (vl ValuesList) Contains(value Value) bool {
 	for _, val := range vl {
 		if value.EqualValueTo(val) {
 			return true
@@ -987,66 +348,14 @@ func (vl ValuesList) Contains(value *Value) bool {
 
 // -----------------------------------------------------------------------------
 //
-// RefelctValuesList
-//
-// -----------------------------------------------------------------------------
-
-type sortable interface {
-	int64 | uint64 | float64 | string
-}
-
-// sortRefelctValuesList returns a sort.Interface that can be used to sort a
-// list of `reflect.Value`s.
-func sortRefelctValuesList(values []reflect.Value) sort.Interface {
-	if len(values) == 0 {
-		return nil
-	}
-	switch values[0].Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return refelctValuesList[int64]{Values: values, GetValueFn: func(v reflect.Value) any { return v.Int() }}
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return refelctValuesList[uint64]{Values: values, GetValueFn: func(v reflect.Value) any { return v.Uint() }}
-	case reflect.Float32, reflect.Float64:
-		return refelctValuesList[float64]{Values: values, GetValueFn: func(v reflect.Value) any { return v.Float() }}
-	case reflect.String:
-		return refelctValuesList[string]{Values: values, GetValueFn: func(v reflect.Value) any { return v.String() }}
-	}
-	return nil
-}
-
-type refelctValuesList[T sortable] struct {
-	Values     []reflect.Value
-	GetValueFn func(reflect.Value) any
-}
-
-// Len is the number of elements in the collection.
-func (vl refelctValuesList[T]) Len() int {
-	return len(vl.Values)
-}
-
-// Less reports whether the element with index i must sort before the element
-// with index j.
-func (vl refelctValuesList[T]) Less(i, j int) bool {
-	vi := vl.GetValueFn(vl.Values[i]).(T)
-	vj := vl.GetValueFn(vl.Values[j]).(T)
-	return vi < vj
-}
-
-// Swap swaps the elements with indexes i and j.
-func (vl refelctValuesList[T]) Swap(i, j int) {
-	vl.Values[i], vl.Values[j] = vl.Values[j], vl.Values[i]
-}
-
-// -----------------------------------------------------------------------------
-//
-// Dict And Pair Values
+// Dict and Pair Values
 //
 // -----------------------------------------------------------------------------
 
 // Pair represents a pair of key and value.
 type Pair struct {
-	Key   *Value
-	Value *Value
+	Key   Value
+	Value Value
 }
 
 // String returns a string representation of p in the form "'key': 'value'".
@@ -1065,12 +374,12 @@ func (p *Pair) String() string {
 	return fmt.Sprintf("%s: %s", key, value)
 }
 
-// Dict represents a mapping of key-value `Pair`s.
+// Dict represents a mapping of key-value [Pair]s.
 type Dict struct {
 	Pairs []*Pair
 }
 
-// NewDict creates a new `Dict`.
+// NewDict creates a new [Dict].
 func NewDict() *Dict {
 	return &Dict{Pairs: []*Pair{}}
 }
@@ -1085,7 +394,7 @@ func (d *Dict) String() string {
 	return fmt.Sprintf("{%s}", strings.Join(pairs, ", "))
 }
 
-// Keys returns a `ValueList` of keys contained in the d.
+// Keys returns a [ValueList] of keys contained in the dict.
 func (d *Dict) Keys() ValuesList {
 	keys := ValuesList{}
 	for _, pair := range d.Pairs {
@@ -1094,84 +403,12 @@ func (d *Dict) Keys() ValuesList {
 	return keys
 }
 
-// Get returns the `Value` for the given key from d.
-func (d *Dict) Get(key *Value) *Value {
+// Get returns the [Value] for the given key from d.
+func (d *Dict) Get(key Value) (value Value, ok bool) {
 	for _, pair := range d.Pairs {
 		if pair.Key.EqualValueTo(key) {
-			return pair.Value
+			return pair.Value, true
 		}
 	}
-	return AsValue(nil)
-}
-
-// TypeDict represents the reflection type of `Dict`.
-var TypeDict = reflect.TypeOf(Dict{})
-
-// -----------------------------------------------------------------------------
-//
-// Utils For Sorting
-//
-// -----------------------------------------------------------------------------
-
-// sortRunes implements `sort.Interface` for sorting a slice of runes.
-type sortRunes []rune
-
-// Len is the number of elements in the collection.
-func (s sortRunes) Len() int {
-	return len(s)
-}
-
-// Less reports whether the element with index i must sort before the element
-// with index j.
-func (s sortRunes) Less(i, j int) bool {
-	return s[i] < s[j]
-}
-
-// Swap swaps the elements with indexes i and j.
-func (s sortRunes) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-// caseInsensitiveSortedRunes represents a case-insensitive version of
-// `sortRunes` for the purpose of sorting.
-type caseInsensitiveSortedRunes struct {
-	sortRunes
-}
-
-// Less reports whether the element with index i must sort before the element
-// with index j.
-func (ci caseInsensitiveSortedRunes) Less(i, j int) bool {
-	return strings.ToLower(string(ci.sortRunes[i])) < strings.ToLower(string(ci.sortRunes[j]))
-}
-
-// caseInsensitiveValueList represents a case-insensitive version of
-// `ValuesList` for the purpose of sorting.
-type caseInsensitiveValueList struct {
-	ValuesList
-}
-
-// Less reports whether the element with index i must sort before the element
-// with index j.
-func (ci caseInsensitiveValueList) Less(i, j int) bool {
-	vi := ci.ValuesList[i]
-	vj := ci.ValuesList[j]
-	switch {
-	case vi.IsInteger() && vj.IsInteger():
-		return vi.Integer() < vj.Integer()
-	case vi.IsFloat() && vj.IsFloat():
-		return vi.Float() < vj.Float()
-	default:
-		return strings.ToLower(vi.String()) < strings.ToLower(vj.String())
-	}
-}
-
-// CaseInsensitive returns the the data sorted in a case insensitive way (if
-// string).
-func CaseInsensitive(data sort.Interface) sort.Interface {
-	if vl, ok := data.(ValuesList); ok {
-		return &caseInsensitiveValueList{vl}
-	} else if sr, ok := data.(sortRunes); ok {
-		return &caseInsensitiveSortedRunes{sr}
-	}
-	return data
+	return nil, false
 }

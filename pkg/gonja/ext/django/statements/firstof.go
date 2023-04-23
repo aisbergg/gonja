@@ -12,6 +12,9 @@ type FirstofStmt struct {
 	Args     []parse.Expression
 }
 
+var _ parse.Statement = (*FirstofStmt)(nil)
+var _ exec.Statement = (*FirstofStmt)(nil)
+
 func (stmt *FirstofStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *FirstofStmt) String() string {
 	t := stmt.Position()

@@ -14,6 +14,9 @@ type WithStmt struct {
 	Wrapper  *parse.WrapperNode
 }
 
+var _ parse.Statement = (*WithStmt)(nil)
+var _ exec.Statement = (*WithStmt)(nil)
+
 func (stmt *WithStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *WithStmt) String() string {
 	t := stmt.Position()
@@ -45,16 +48,16 @@ func withParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt.Wrapper = wrapper
 
 	if !endargs.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(endargs.Current()), "arguments not allowed here")
+		errors.ThrowSyntaxError(endargs.Current().ErrorToken(), "arguments not allowed here")
 	}
 
 	for !args.End() {
 		key := args.Match(parse.TokenName)
 		if key == nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected an identifier")
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "expected an identifier")
 		}
 		if args.Match(parse.TokenAssign) == nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unexpected '%s', expected '='", args.Current().Val)
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "unexpected '%s', expected '='", args.Current().Val)
 		}
 		value := args.ParseExpression()
 		stmt.Pairs[key.Val] = value

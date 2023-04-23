@@ -49,7 +49,7 @@ func ifNotEqualParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	ifnotequalNode.var2 = args.ParseExpression()
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "ifequal only takes 2 args")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "ifequal only takes 2 args")
 	}
 
 	// Wrap then/else-blocks
@@ -57,7 +57,7 @@ func ifNotEqualParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	ifnotequalNode.thenWrapper = wrapper
 
 	if !endargs.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(endargs.Current()), "arguments not allowed here")
+		errors.ThrowSyntaxError(endargs.Current().ErrorToken(), "arguments not allowed here")
 	}
 
 	if wrapper.EndTag == "else" {
@@ -66,7 +66,7 @@ func ifNotEqualParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 		ifnotequalNode.elseWrapper = wrapper
 
 		if !endargs.End() {
-			errors.ThrowSyntaxError(parse.AsErrorToken(endargs.Current()), "arguments not allowed here")
+			errors.ThrowSyntaxError(endargs.Current().ErrorToken(), "arguments not allowed here")
 		}
 	}
 

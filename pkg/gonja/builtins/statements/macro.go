@@ -12,6 +12,9 @@ type MacroStmt struct {
 	*parse.MacroNode
 }
 
+var _ parse.Statement = (*MacroStmt)(nil)
+var _ exec.Statement = (*MacroStmt)(nil)
+
 // func (stmt *MacroStmt) Position() *tokens.Token { return stmt.Location }
 func (stmt *MacroStmt) String() string {
 	t := stmt.Position()
@@ -81,18 +84,18 @@ func macroParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 
 	name := args.Match(parse.TokenName)
 	if name == nil {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "macro-tag needs at least an identifier as name.")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "macro-tag needs at least an identifier as name.")
 	}
 	stmt.Name = name.Val
 
 	if args.Match(parse.TokenLparen) == nil {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unexpected '%s', expected '('", args.Current().Val)
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "unexpected '%s', expected '('", args.Current().Val)
 	}
 
 	for args.Match(parse.TokenRparen) == nil {
 		argName := args.Match(parse.TokenName)
 		if argName == nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected argument name as identifier.")
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "expected argument name as identifier.")
 		}
 
 		if args.Match(parse.TokenAssign) != nil {
@@ -111,7 +114,7 @@ func macroParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 			break
 		}
 		if args.Match(parse.TokenComma) == nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unexpected '%s', expected ',' or ')'", args.Current().Val)
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "unexpected '%s', expected ',' or ')'", args.Current().Val)
 		}
 	}
 
@@ -120,7 +123,7 @@ func macroParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	// }
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed macro-tag.")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "malformed macro-tag.")
 	}
 
 	// Body wrapping
@@ -128,7 +131,7 @@ func macroParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt.Wrapper = wrapper
 
 	if !endargs.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(endargs.Current()), "arguments not allowed here")
+		errors.ThrowSyntaxError(endargs.Current().ErrorToken(), "arguments not allowed here")
 	}
 
 	p.Template.Macros[stmt.Name] = stmt

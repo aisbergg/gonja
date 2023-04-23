@@ -1,8 +1,7 @@
 package builtins
 
 import (
-	"github.com/pkg/errors"
-
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 	"github.com/aisbergg/gonja/pkg/gonja/utils"
 )
@@ -47,15 +46,15 @@ func Range(va *exec.VarArgs) <-chan int {
 	return chnl
 }
 
-func Dict(va *exec.VarArgs) *exec.Value {
+func Dict(va *exec.VarArgs) exec.Value {
 	dict := exec.NewDict()
 	for _, kv := range va.Kwargs {
 		dict.Pairs = append(dict.Pairs, &exec.Pair{
-			Key:   exec.AsValue(kv.Key),
+			Key:   va.ValueFactory.NewValue(kv.Key, false),
 			Value: kv.Value,
 		})
 	}
-	return exec.AsValue(dict)
+	return va.ValueFactory.NewValue(dict, false)
 }
 
 type cycler struct {
@@ -79,7 +78,7 @@ func (c *cycler) Next() string {
 	return value
 }
 
-func Cycler(va *exec.VarArgs) *exec.Value {
+func Cycler(va *exec.VarArgs) exec.Value {
 	c := &cycler{}
 	for _, arg := range va.Args {
 		c.values = append(c.values, arg.String())
@@ -89,7 +88,7 @@ func Cycler(va *exec.VarArgs) *exec.Value {
 		"reset": c.Reset,
 	}
 	c.Reset()
-	return exec.AsValue(c.getters)
+	return va.ValueFactory.NewValue(c.getters, false)
 }
 
 type joiner struct {
@@ -105,17 +104,15 @@ func (j *joiner) String() string {
 	return j.sep
 }
 
-func Joiner(va *exec.VarArgs) *exec.Value {
+func Joiner(va *exec.VarArgs) exec.Value {
 	p := va.ExpectKwArgs([]*exec.Kwarg{{"sep", ","}})
 	if p.IsError() {
-		return exec.AsValue(errors.Wrapf(p, "wrong signature for 'joiner'"))
+		errors.ThrowTemplateRuntimeError("wrong signature for 'joiner': %s", p.Error())
 	}
-	sep := p.GetKwarg("sep", nil).String()
+	sep := p.GetKwarg("sep").String()
 	j := &joiner{sep: sep}
-	return exec.AsValue(j.String)
+	return va.ValueFactory.NewValue(j.String, false)
 }
-
-// type namespace map[string]any
 
 func Namespace(va *exec.VarArgs) map[string]any {
 	ns := map[string]any{}
@@ -125,7 +122,7 @@ func Namespace(va *exec.VarArgs) map[string]any {
 	return ns
 }
 
-func Lipsum(va *exec.VarArgs) *exec.Value {
+func Lipsum(va *exec.VarArgs) exec.Value {
 	p := va.ExpectKwArgs([]*exec.Kwarg{
 		{"n", 5},
 		{"html", true},
@@ -133,11 +130,11 @@ func Lipsum(va *exec.VarArgs) *exec.Value {
 		{"max", 100},
 	})
 	if p.IsError() {
-		return exec.AsValue(errors.Wrapf(p, "wrong signature for 'lipsum'"))
+		errors.ThrowTemplateRuntimeError("wrong signature for 'lipsum': %s", p.Error())
 	}
-	n := p.GetKwarg("n", nil).Integer()
-	html := p.GetKwarg("html", nil).Bool()
-	min := p.GetKwarg("min", nil).Integer()
-	max := p.GetKwarg("max", nil).Integer()
-	return exec.AsSafeValue(utils.Lipsum(n, html, min, max))
+	n := p.GetKwarg("n").Integer()
+	html := p.GetKwarg("html").Bool()
+	min := p.GetKwarg("min").Integer()
+	max := p.GetKwarg("max").Integer()
+	return va.ValueFactory.NewValue(utils.Lipsum(n, html, min, max), true)
 }

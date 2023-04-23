@@ -5,167 +5,212 @@ import (
 
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 	"github.com/aisbergg/gonja/pkg/gonja/ext"
+	"github.com/aisbergg/gonja/pkg/gonja/loaders"
 )
 
 // Option is a function that can be used to configure the gonja template engine.
 type Option func(*Environment)
 
-// BlockStartString marks the beginning of a block. Defaults to '{%'
-func BlockStartString(s string) Option {
+// -----------------------------------------------------------------------------
+//
+// Loader Options
+//
+// -----------------------------------------------------------------------------
+
+// OptLoader sets the loader that will be used to load templates by name. To set
+// a cached filesystem loader for example, use the following code:
+//
+//	env := gonja.NewEnvironment(
+//	    gonja.OptLoader(gonja.CachedLoader(gonja.MustFilesystemLoader("path/to/templates"))),
+//	)
+func OptLoader(loader loaders.Loader) Option {
+	return func(cfg *Environment) {
+		cfg.loader = loader
+	}
+}
+
+// -----------------------------------------------------------------------------
+//
+// Parser Options
+//
+// -----------------------------------------------------------------------------
+
+// OptBlockStartString marks the beginning of a block. Defaults to '{%'
+func OptBlockStartString(s string) Option {
 	return func(cfg *Environment) {
 		cfg.BlockStartString = s
 	}
 }
 
-// BlockEndString marks the end of a block. Defaults to '%}'.
-func BlockEndString(s string) Option {
+// OptBlockEndString marks the end of a block. Defaults to '%}'.
+func OptBlockEndString(s string) Option {
 	return func(cfg *Environment) {
 		cfg.BlockEndString = s
 	}
 }
 
-// VariableStartString marks the the beginning of a print statement. Defaults to '{{'.
-func VariableStartString(s string) Option {
+// OptVariableStartString marks the the beginning of a print statement. Defaults
+// to '{{'.
+func OptVariableStartString(s string) Option {
 	return func(cfg *Environment) {
 		cfg.VariableStartString = s
 	}
 }
 
-// VariableEndString marks the end of a print statement. Defaults to '}}'.
-func VariableEndString(s string) Option {
+// OptVariableEndString marks the end of a print statement. Defaults to '}}'.
+func OptVariableEndString(s string) Option {
 	return func(cfg *Environment) {
 		cfg.VariableEndString = s
 	}
 }
 
-// CommentStartString marks the beginning of a comment. Defaults to '{#'.
-func CommentStartString(s string) Option {
+// OptCommentStartString marks the beginning of a comment. Defaults to '{#'.
+func OptCommentStartString(s string) Option {
 	return func(cfg *Environment) {
 		cfg.CommentStartString = s
 	}
 }
 
-// CommentEndString marks the end of a comment. Defaults to '#}'.
-func CommentEndString(s string) Option {
+// OptCommentEndString marks the end of a comment. Defaults to '#}'.
+func OptCommentEndString(s string) Option {
 	return func(cfg *Environment) {
 		cfg.CommentEndString = s
 	}
 }
 
-// LineStatementPrefix will be used as prefix for line based statements, if
+// OptLineStatementPrefix will be used as prefix for line based statements, if
 // given and a string.
-func LineStatementPrefix(s string) Option {
+func OptLineStatementPrefix(s string) Option {
 	return func(cfg *Environment) {
 		cfg.LineStatementPrefix = s
 	}
 }
 
-// LineCommentPrefix will be used as prefix for line based comments, if given
+// OptLineCommentPrefix will be used as prefix for line based comments, if given
 // and a string.
-func LineCommentPrefix(s string) Option {
+func OptLineCommentPrefix(s string) Option {
 	return func(cfg *Environment) {
 		cfg.LineCommentPrefix = s
 	}
 }
 
-// NewlineSequence defines the sequence that starts a newline. Must be one of
+// -----------------------------------------------------------------------------
+//
+// Exec Options
+//
+// -----------------------------------------------------------------------------
+
+// OptNewlineSequence defines the sequence that starts a newline. Must be one of
 // '\r', '\n' or '\r\n'. The default is '\n' which is a useful default for Linux
 // and OS X systems as well as web applications.
-func NewlineSequence(s string) Option {
+func OptNewlineSequence(s string) Option {
 	return func(cfg *Environment) {
 		cfg.NewlineSequence = s
 	}
 }
 
-// TrimBlocks enables the removal of the first newline after a block (block, not
-// variable tag!). Disabled by default.
-func TrimBlocks() Option {
+// OptTrimBlocks enables the removal of the first newline after a block (block,
+// not variable tag!). Disabled by default.
+func OptTrimBlocks() Option {
 	return func(cfg *Environment) {
 		cfg.TrimBlocks = true
 	}
 }
 
-// NoTrimBlocks disables the TrimBlocks feature.
-func NoTrimBlocks() Option {
+// OptNoTrimBlocks disables the TrimBlocks feature. It is disabled by default.
+func OptNoTrimBlocks() Option {
 	return func(cfg *Environment) {
 		cfg.TrimBlocks = false
 	}
 }
 
-// LstripBlocks enables the strip of leading spaces and tabs from the start of a
-// line to a block. Disabled by default.
-func LstripBlocks() Option {
+// OptLstripBlocks enables the strip of leading spaces and tabs from the start
+// of a line to a block. Disabled by default.
+func OptLstripBlocks() Option {
 	return func(cfg *Environment) {
 		cfg.LstripBlocks = true
 	}
 }
 
-// NoLstripBlocks disables the LstripBlocks feature.
-func NoLstripBlocks() Option {
+// OptNoLstripBlocks disables the LstripBlocks feature.
+func OptNoLstripBlocks() Option {
 	return func(cfg *Environment) {
 		cfg.LstripBlocks = false
 	}
 }
 
-// KeepTrailingNewline enables the preservation of trailing newline when
+// OptKeepTrailingNewline enables the preservation of trailing newline when
 // rendering templates. It is disabled by default, which causes a single
 // newline, if present, to be stripped from the end of the template.
-func KeepTrailingNewline() Option {
+func OptKeepTrailingNewline() Option {
 	return func(cfg *Environment) {
 		cfg.KeepTrailingNewline = true
 	}
 }
 
-// NoKeepTrailingNewline disables the KeepTrailingNewline feature.
-func NoKeepTrailingNewline() Option {
+// OptNoKeepTrailingNewline disables the KeepTrailingNewline feature.
+func OptNoKeepTrailingNewline() Option {
 	return func(cfg *Environment) {
 		cfg.KeepTrailingNewline = false
 	}
 }
 
-// Autoescape enables the XML/HTML autoescaping feature. It is disabled by
+// OptAutoescape enables the XML/HTML autoescaping feature. It is disabled by
 // default.
-func Autoescape() Option {
+func OptAutoescape() Option {
 	return func(cfg *Environment) {
 		cfg.Autoescape = true
 	}
 }
 
-// NoAutoescape disables the Autoescape feature.
-func NoAutoescape() Option {
+// OptNoAutoescape disables the XML/HTML autoescaping feature. It is disabled by
+// default.
+func OptNoAutoescape() Option {
 	return func(cfg *Environment) {
 		cfg.Autoescape = false
 	}
 }
 
-// UndefinedOpt sets the behavior for undefined variables.
-func UndefinedOpt(undefined exec.UndefinedFunc) Option {
+// OptUndefined sets the behavior for undefined variables.
+func OptUndefined(undefined exec.UndefinedFunc) Option {
 	return func(cfg *Environment) {
 		cfg.Undefined = undefined
 	}
 }
 
-// SetExtensionConfig sets a configuration for an extension.
-func SetExtensionConfig(name string, config ext.Inheritable) Option {
+// OptSetExtensionConfig sets a configuration for an extension. If the given
+// config is nil, the named configuration will be removed from the environment.
+func OptSetExtensionConfig(name string, config ext.Inheritable) Option {
 	return func(cfg *Environment) {
+		if config == nil {
+			delete(cfg.ExtensionConfig, name)
+			return
+		}
 		cfg.ExtensionConfig[name] = config
 	}
 }
 
-// SetGlobal sets a global variable in the environment.
-func SetGlobal(name string, value any) Option {
+// OptSetGlobal sets a global variable in the environment. If the value is nil,
+// the variable will be removed from the environment.
+func OptSetGlobal(name string, value any) Option {
 	return func(cfg *Environment) {
+		if value == nil {
+			delete(cfg.Globals, name)
+			return
+		}
 		cfg.Globals[name] = value
 	}
 }
 
-// SetCustomGetter sets a custom getter for resolving values from a custom type
-// that is not supported by default, e.g. a ordered map.
-func SetCustomGetter(typ reflect.Type, getter exec.CustomGetter) Option {
+// OptRegisterCustomType registers a custom value type that is not supported by
+// default, e.g. an ordered map. If the value is nil, the type will be
+// unregistered from the environment.
+func OptRegisterCustomType(typ reflect.Type, getter exec.ValueFunc) Option {
 	return func(cfg *Environment) {
 		if getter == nil {
+			delete(cfg.CustomTypes, typ)
 			return
 		}
-		cfg.CustomGetters[typ] = getter
+		cfg.CustomTypes[typ] = getter
 	}
 }

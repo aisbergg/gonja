@@ -9,39 +9,19 @@ import (
 
 // Undefined is an interface that represents an Undefined value.
 type Undefined interface {
+	Value
+
 	// Undefind is a marker method to identify undefined values.
 	Undefined()
 
-	// Get returns the value for the given key.
-	Get(name any) any
+	// VariableName returns the name of the variable that is undefined.
+	VariableName() string
 
-	// Value interfaces
-	IsString() bool
-	IsBool() bool
-	IsFloat() bool
-	IsInteger() bool
-	IsNumber() bool
-	IsCallable() bool
-	IsList() bool
-	IsDict() bool
-	IsIterable() bool
-	IsNil() bool
-	String() string
-	Integer() int
-	Float() float64
-	Bool() bool
-	IsTrue() bool
-	Len() int
-	Slice(i, j int) *Value
-	Index(i int) *Value
-	Contains(other *Value) bool
-	CanSlice() bool
-	Iterate(fn func(idx, count int, key, value *Value) bool, empty func())
-	IterateOrder(fn func(idx, count int, key, value *Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool)
-	EqualValueTo(other *Value) bool
-	Keys() ValuesList
-	Items() []*Pair
-	Set(key string, value interface{})
+	// Hint returns a hint for the undefined variable.
+	Hint() string
+
+	// Get returns the value for the given key.
+	// Get(name any) any
 }
 
 // UndefinedFunc is a function that creates a new Undefined value.
@@ -50,13 +30,25 @@ type UndefinedFunc func(name string, hintFormat string, args ...any) Undefined
 // undefinedType represents the reflect.Type of Undefined.
 var undefinedType = reflect.TypeOf((*Undefined)(nil)).Elem()
 
+// IsDefined returns true if the given value is not undefined.
+func IsDefined(val Value) bool {
+	_, ok := val.(Undefined)
+	return !ok
+}
+
 // -----------------------------------------------------------------------------
+//
 // UndefinedValue
+//
 // -----------------------------------------------------------------------------
+
+var _ Undefined = (*UndefinedValue)(nil)
 
 // UndefinedValue represents an undefined value that renders to an empty string.
 // Most other access methods will throw an error.
 type UndefinedValue struct {
+	BaseValue
+
 	name string
 	hint string
 }
@@ -67,52 +59,29 @@ func NewUndefinedValue(name, format string, args ...any) Undefined {
 	if format != "" {
 		hint = fmt.Sprintf(format, args...)
 	}
-	return UndefinedValue{
+	return &UndefinedValue{
 		name: name,
 		hint: hint,
 	}
 }
 
 // Undefined is a marker method to identify undefined values.
-func (UndefinedValue) Undefined() {}
+func (*UndefinedValue) Undefined() {}
 
-// Get returns the value for the given key.
-func (u UndefinedValue) Get(key any) any {
-	errors.ThrowUndefinedError(u.name, u.hint)
-	return nil
+// VariableName returns the name of the variable that is undefined.
+func (u UndefinedValue) VariableName() string {
+	return u.name
 }
 
-func (UndefinedValue) IsString() bool {
-	return false
+// Hint returns a hint for the undefined variable.
+func (u UndefinedValue) Hint() string {
+	return u.hint
 }
-func (UndefinedValue) IsBool() bool {
-	return false
+
+func (*UndefinedValue) String() string {
+	return ""
 }
-func (UndefinedValue) IsFloat() bool {
-	return false
-}
-func (UndefinedValue) IsInteger() bool {
-	return false
-}
-func (UndefinedValue) IsNumber() bool {
-	return false
-}
-func (UndefinedValue) IsCallable() bool {
-	return false
-}
-func (UndefinedValue) IsList() bool {
-	return false
-}
-func (UndefinedValue) IsDict() bool {
-	return false
-}
-func (UndefinedValue) IsIterable() bool {
-	return false
-}
-func (UndefinedValue) IsNil() bool {
-	return false
-}
-func (UndefinedValue) String() string {
+func (*UndefinedValue) Escaped() string {
 	return ""
 }
 func (u UndefinedValue) Integer() int {
@@ -127,45 +96,48 @@ func (u UndefinedValue) Bool() bool {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return false
 }
-func (UndefinedValue) IsTrue() bool {
-	return false
-}
-func (UndefinedValue) Len() int {
+func (*UndefinedValue) Len() int {
 	return 0
 }
-func (u UndefinedValue) Slice(i, j int) *Value {
+func (u UndefinedValue) Slice(i, j int) Value {
+	return u.valueFactory.NewValue("", false)
+}
+func (u UndefinedValue) Index(i int) Value {
+	return u.valueFactory.NewValue("", false)
+}
+func (u *UndefinedValue) EqualValueTo(other Value) bool {
+	return false
+}
+func (u *UndefinedValue) Keys() ValuesList {
 	errors.ThrowUndefinedError(u.name, u.hint)
-	return nil
-}
-func (u UndefinedValue) Index(i int) *Value {
-	errors.ThrowUndefinedError(u.name, u.hint)
-	return nil
-}
-func (UndefinedValue) Contains(other *Value) bool {
-	return false
-}
-func (UndefinedValue) CanSlice() bool {
-	return false
-}
-func (UndefinedValue) Iterate(fn func(idx, count int, key, value *Value) bool, empty func()) {}
-func (UndefinedValue) IterateOrder(fn func(idx, count int, key, value *Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
-}
-func (UndefinedValue) EqualValueTo(other *Value) bool {
-	return false
-}
-func (UndefinedValue) Keys() ValuesList {
 	return ValuesList{}
 }
-func (UndefinedValue) Items() []*Pair {
+func (u *UndefinedValue) Values() ValuesList {
+	errors.ThrowUndefinedError(u.name, u.hint)
+	return ValuesList{}
+}
+func (u *UndefinedValue) Items() []*Pair {
+	errors.ThrowUndefinedError(u.name, u.hint)
 	return []*Pair{}
+}
+func (u UndefinedValue) GetItem(key any) Value {
+	errors.ThrowUndefinedError(u.name, u.hint)
+	return nil
 }
 func (u UndefinedValue) Set(key string, value interface{}) {
 	errors.ThrowUndefinedError(u.name, u.hint)
 }
+func (*UndefinedValue) Iterate(fn func(idx, count int, key, value Value) bool, empty func()) {}
+func (*UndefinedValue) IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
+}
 
 // -----------------------------------------------------------------------------
+//
 // StrictUndefinedValue
+//
 // -----------------------------------------------------------------------------
+
+var _ Undefined = (*StrictUndefinedValue)(nil)
 
 // StrictUndefinedValue represents an undefined value that throws an error when
 // accessed.
@@ -179,7 +151,7 @@ func NewStrictUndefinedValue(varName string, format string, args ...any) Undefin
 	if format != "" {
 		hint = fmt.Sprintf(format, args...)
 	}
-	return StrictUndefinedValue{
+	return &StrictUndefinedValue{
 		UndefinedValue: UndefinedValue{
 			name: varName,
 			hint: hint,
@@ -187,44 +159,40 @@ func NewStrictUndefinedValue(varName string, format string, args ...any) Undefin
 	}
 }
 
-func (u StrictUndefinedValue) String() string {
+func (u *StrictUndefinedValue) String() string {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return ""
 }
-func (u StrictUndefinedValue) IsTrue() bool {
+func (u *StrictUndefinedValue) IsTrue() bool {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return false
 }
-func (u StrictUndefinedValue) Len() int {
+func (u *StrictUndefinedValue) Len() int {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return 0
 }
-func (u StrictUndefinedValue) Contains(other *Value) bool {
+func (u *StrictUndefinedValue) Contains(other Value) bool {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return false
 }
-func (u StrictUndefinedValue) Iterate(fn func(idx, count int, key, value *Value) bool, empty func()) {
+func (u *StrictUndefinedValue) Iterate(fn func(idx, count int, key, value Value) bool, empty func()) {
 	errors.ThrowUndefinedError(u.name, u.hint)
 }
-func (u StrictUndefinedValue) IterateOrder(fn func(idx, count int, key, value *Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
+func (u *StrictUndefinedValue) IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
 	errors.ThrowUndefinedError(u.name, u.hint)
 }
-func (u StrictUndefinedValue) EqualValueTo(other *Value) bool {
+func (u *StrictUndefinedValue) EqualValueTo(other Value) bool {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return false
-}
-func (u StrictUndefinedValue) Keys() ValuesList {
-	errors.ThrowUndefinedError(u.name, u.hint)
-	return ValuesList{}
-}
-func (u StrictUndefinedValue) Items() []*Pair {
-	errors.ThrowUndefinedError(u.name, u.hint)
-	return nil
 }
 
 // -----------------------------------------------------------------------------
+//
 // ChainedUndefinedValue
+//
 // -----------------------------------------------------------------------------
+
+var _ Undefined = (*ChainedUndefinedValue)(nil)
 
 // ChainedUndefinedValue represents an undefined value that renders to an empty
 // string. Most other access methods will throw an error. It is different from
@@ -239,7 +207,7 @@ func NewChainedUndefinedValue(varName string, format string, args ...any) Undefi
 	if format != "" {
 		hint = fmt.Sprintf(format, args...)
 	}
-	return ChainedUndefinedValue{
+	return &ChainedUndefinedValue{
 		UndefinedValue: UndefinedValue{
 			name: varName,
 			hint: hint,
@@ -248,13 +216,17 @@ func NewChainedUndefinedValue(varName string, format string, args ...any) Undefi
 }
 
 // Get returns the value for the given key.
-func (u ChainedUndefinedValue) Get(key any) any {
+func (u *ChainedUndefinedValue) GetItem(key any) Value {
 	return NewChainedUndefinedValue(fmt.Sprintf("%s.%s", u.name, key), u.hint)
 }
 
 // -----------------------------------------------------------------------------
+//
 // ChainedStrictUndefinedValue
+//
 // -----------------------------------------------------------------------------
+
+var _ Undefined = (*ChainedStrictUndefinedValue)(nil)
 
 // ChainedStrictUndefinedValue is like ChainedUndefinedValue but throws an error
 // on any other type of access.
@@ -268,7 +240,7 @@ func NewChainedStrictUndefinedValue(varName string, format string, args ...any) 
 	if format != "" {
 		hint = fmt.Sprintf(format, args...)
 	}
-	return ChainedStrictUndefinedValue{
+	return &ChainedStrictUndefinedValue{
 		StrictUndefinedValue: StrictUndefinedValue{
 			UndefinedValue: UndefinedValue{
 				name: varName,
@@ -279,6 +251,6 @@ func NewChainedStrictUndefinedValue(varName string, format string, args ...any) 
 }
 
 // Get returns the value for the given key.
-func (u ChainedStrictUndefinedValue) Get(key any) any {
+func (u *ChainedStrictUndefinedValue) GetItem(key any) Value {
 	return NewChainedStrictUndefinedValue(fmt.Sprintf("%s.%s", u.name, key), u.hint)
 }

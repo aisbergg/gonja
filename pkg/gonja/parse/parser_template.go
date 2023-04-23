@@ -1,21 +1,21 @@
 package parse
 
 import (
-	log "github.com/aisbergg/gonja/internal/log/parse"
+	debug "github.com/aisbergg/gonja/internal/debug/parse"
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
 )
 
-// TemplateParser is a function that parses a template string and returns a node
-// tree.
-type TemplateParser func(string) (*TemplateNode, error)
+// TemplateParseFn is a function that parses a template string and returns a
+// node tree.
+type TemplateParseFn func(string) (*TemplateNode, error)
 
 // Doc = { ( Filter | Tag | HTML ) }
 func (p *Parser) parseDocElement() Node {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	t := p.Current()
 
@@ -34,7 +34,7 @@ func (p *Parser) parseDocElement() Node {
 	case TokenBlockBegin:
 		return p.ParseStatementBlock()
 	}
-	errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected token (only HTML/tags/filters in templates allowed)")
+	errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected token (only HTML/tags/filters in templates allowed)")
 	return nil
 }
 
@@ -51,11 +51,11 @@ func (p *Parser) ParseTemplate() (tpl *TemplateNode, err error) {
 		}
 	}()
 
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse template: %s", p.Current())
+	debug.Print("parse template: %s", p.Current())
 
 	tpl = &TemplateNode{
 		Blocks: BlockSet{},

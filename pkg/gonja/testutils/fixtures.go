@@ -2,11 +2,13 @@ package testutils
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 
 	"strings"
 	"time"
 
+	"github.com/aisbergg/gonja/pkg/gonja"
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 )
 
@@ -14,6 +16,7 @@ var adminList = []string{"user2"}
 
 var time1 = time.Date(2014, 06, 10, 15, 30, 15, 0, time.UTC)
 var time2 = time.Date(2011, 03, 21, 8, 37, 56, 12, time.UTC)
+var valueVactory = exec.NewValueFactory(gonja.Undefined, map[reflect.Type]exec.ValueFunc{})
 
 type post struct {
 	Text    string
@@ -50,8 +53,8 @@ func isAdmin(u *user) bool {
 	return false
 }
 
-func (u *user) IsAdmin() *exec.Value {
-	return exec.AsValue(isAdmin(u))
+func (u *user) IsAdmin() exec.Value {
+	return valueVactory.NewValue(isAdmin(u), false)
 }
 
 func (u *user) IsAdmin2() bool {
@@ -134,15 +137,15 @@ Yep!`,
 			}
 			return s
 		},
-		"func_variadic_sum_int2": func(args ...*exec.Value) *exec.Value {
+		"func_variadic_sum_int2": func(args ...exec.Value) exec.Value {
 			// Create a sum
 			s := 0
 			for _, i := range args {
 				s += i.Integer()
 			}
-			return exec.AsValue(s)
+			return valueVactory.NewValue(s, false)
 		},
-		"func_with_varargs": func(params *exec.VarArgs) *exec.Value {
+		"func_with_varargs": func(params *exec.VarArgs) exec.Value {
 			// arg := params.args[0]
 			argsAsStr := []string{}
 			for _, arg := range params.Args {
@@ -162,7 +165,7 @@ Yep!`,
 			kwargs := strings.Join(kwargsAsStr, ", ")
 
 			str := fmt.Sprintf("VarArgs(args=[%s], kwargs={%s})", args, kwargs)
-			return exec.AsSafeValue(str)
+			return valueVactory.NewValue(str, true)
 		},
 	},
 	"complex": map[string]any{

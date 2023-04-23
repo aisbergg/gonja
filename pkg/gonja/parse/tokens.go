@@ -140,8 +140,8 @@ func (t Token) String() string {
 	return fmt.Sprintf("<Token[%s] Val='%s' Pos=%d Line=%d Col=%d>", t.Type, val, t.Pos, t.Line, t.Col)
 }
 
-// AsErrorToken returns the token as an error token.
-func AsErrorToken(t *Token) *errors.Token {
+// ErrorToken converts the Token into an [errors.Token].
+func (t Token) ErrorToken() *errors.Token {
 	return &errors.Token{
 		Val:  t.Val,
 		Pos:  t.Pos,

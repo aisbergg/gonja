@@ -4,5 +4,5 @@ import (
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 )
 
-// All holds all builtins statements for easier registeration
+// All holds all built-in statements.
 var All = exec.StatementSet{}

@@ -37,12 +37,12 @@ func (e *templateLoadError) Name() string {
 	return e.name
 }
 
-// ThrowTemplateLoadError
-func ThrowTemplateLoadError(name string, format string, args ...any) {
-	panic(&templateLoadError{
+// NewTemplateLoadError creates a new TemplateLoadError.
+func NewTemplateLoadError(name string, format string, args ...any) TemplateLoadError {
+	return &templateLoadError{
 		msg:  fmt.Sprintf(format, args...),
 		name: name,
-	})
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -76,11 +76,11 @@ func (e *templateNotFoundError) Name() string {
 	return e.name
 }
 
-// ThrowTemplateNotFoundError throws a an error when a template is not found.
-func ThrowTemplateNotFoundError(name string) {
-	panic(&templateNotFoundError{
+// NewTemplateNotFoundError creates a new TemplateNotFoundError.
+func NewTemplateNotFoundError(name string) TemplateNotFoundError {
+	return &templateNotFoundError{
 		name: name,
-	})
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -113,11 +113,4 @@ func (e *templatesNotFoundError) Error() string {
 // Names returns the names of the templates that were not found.
 func (e *templatesNotFoundError) Names() []string {
 	return e.names
-}
-
-// ThrowTemplatesNotFoundError throws a an error when a template is not found.
-func ThrowTemplatesNotFoundError(names []string) {
-	panic(&templatesNotFoundError{
-		names: names,
-	})
 }

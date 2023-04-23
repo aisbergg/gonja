@@ -19,6 +19,9 @@ type IncludeStmt struct {
 	IsEmpty       bool
 }
 
+var _ parse.Statement = (*IncludeStmt)(nil)
+var _ exec.Statement = (*IncludeStmt)(nil)
+
 // Position returns the token position of the statement.
 func (stmt *IncludeStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *IncludeStmt) String() string {
@@ -36,7 +39,7 @@ func (stmt *IncludeStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode
 
 	if stmt.FilenameExpr != nil {
 		filename := r.Eval(stmt.FilenameExpr).String()
-		included, err := r.Loader.GetTemplate(filename)
+		included, err := r.TemplateLoadFn(filename)
 		if err != nil {
 			if stmt.IgnoreMissing {
 				return
@@ -92,12 +95,12 @@ func includeParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 
 	// Preload static template
 	if stmt.Filename != "" {
-		tpl, err := p.TemplateParser(stmt.Filename)
+		tpl, err := p.TemplateParseFn(stmt.Filename)
 		if err != nil {
 			if stmt.IgnoreMissing {
 				stmt.IsEmpty = true
 			} else {
-				errors.ThrowSyntaxError(parse.AsErrorToken(stmt.Location), "unable to parse included template '%s'", stmt.Filename)
+				errors.ThrowSyntaxError(stmt.Location.ErrorToken(), "unable to parse included template '%s'", stmt.Filename)
 			}
 		} else {
 			stmt.Template = tpl
@@ -105,7 +108,7 @@ func includeParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	}
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed 'include'-tag args.")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "malformed 'include'-tag args.")
 	}
 
 	return stmt

@@ -17,6 +17,9 @@ type FilterStmt struct {
 	filterChain []*parse.FilterCall
 }
 
+var _ parse.Statement = (*FilterStmt)(nil)
+var _ exec.Statement = (*FilterStmt)(nil)
+
 // Position returns the token position of the statement.
 func (stmt *FilterStmt) Position() *parse.Token { return stmt.position }
 func (stmt *FilterStmt) String() string {
@@ -32,11 +35,11 @@ func (stmt *FilterStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode)
 	sub.Out = &out
 
 	if err := sub.ExecuteWrapper(stmt.bodyWrapper); err != nil {
-		// pass error up the execution stack
+		// pass error up the call stack
 		panic(err)
 	}
 
-	value := exec.AsValue(out.String())
+	value := r.ValueVactory.NewValue(out.String(), false)
 	for _, call := range stmt.filterChain {
 		value = r.Evaluator().ExecuteFilter(call, value)
 	}
@@ -61,7 +64,7 @@ func filterParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	}
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed filter-tag args")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "malformed filter-tag args")
 	}
 
 	return stmt

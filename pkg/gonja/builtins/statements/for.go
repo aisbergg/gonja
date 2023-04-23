@@ -20,6 +20,9 @@ type ForStmt struct {
 	emptyWrapper *parse.WrapperNode
 }
 
+var _ parse.Statement = (*ForStmt)(nil)
+var _ exec.Statement = (*ForStmt)(nil)
+
 func (stmt *ForStmt) Position() *parse.Token { return stmt.bodyWrapper.Position() }
 func (stmt *ForStmt) String() string {
 	t := stmt.Position()
@@ -27,25 +30,25 @@ func (stmt *ForStmt) String() string {
 }
 
 type LoopInfos struct {
-	Index      int         `gonja:"index"`
-	Index0     int         `gonja:"index0"`
-	RevIndex   int         `gonja:"revindex"`
-	RevIndex0  int         `gonja:"revindex0"`
-	First      bool        `gonja:"first"`
-	Last       bool        `gonja:"last"`
-	Length     int         `gonja:"length"`
-	Depth      int         `gonja:"depth"`
-	Depth0     int         `gonja:"depth0"`
-	PrevItem   *exec.Value `gonja:"previtem"`
-	NextItem   *exec.Value `gonja:"nextitem"`
-	_lastValue *exec.Value
+	Index      int        `gonja:"index"`
+	Index0     int        `gonja:"index0"`
+	RevIndex   int        `gonja:"revindex"`
+	RevIndex0  int        `gonja:"revindex0"`
+	First      bool       `gonja:"first"`
+	Last       bool       `gonja:"last"`
+	Length     int        `gonja:"length"`
+	Depth      int        `gonja:"depth"`
+	Depth0     int        `gonja:"depth0"`
+	PrevItem   exec.Value `gonja:"previtem"`
+	NextItem   exec.Value `gonja:"nextitem"`
+	_lastValue exec.Value
 }
 
-func (li *LoopInfos) Cycle(va *exec.VarArgs) *exec.Value {
+func (li *LoopInfos) Cycle(va *exec.VarArgs) exec.Value {
 	return va.Args[int(math.Mod(float64(li.Index0), float64(len(va.Args))))]
 }
 
-func (li *LoopInfos) Changed(value *exec.Value) bool {
+func (li *LoopInfos) Changed(value exec.Value) bool {
 	same := li._lastValue != nil && value.EqualValueTo(li._lastValue)
 	li._lastValue = value
 	return !same
@@ -59,7 +62,7 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 	items := exec.NewDict()
 
 	// First iteration: filter values to ensure proper LoopInfos
-	obj.Iterate(func(idx, count int, key, value *exec.Value) bool {
+	obj.Iterate(func(idx, count int, key, value exec.Value) bool {
 		sub := r.Inherit()
 		ctx := sub.Ctx
 		pair := &exec.Pair{}
@@ -67,7 +70,7 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 		// There's something to iterate over (correct type and at least 1 item)
 		// Update loop infos and public context
 		if stmt.value != "" && !key.IsString() && key.Len() == 2 {
-			key.Iterate(func(idx, count int, key, value *exec.Value) bool {
+			key.Iterate(func(idx, count int, key, value exec.Value) bool {
 				switch idx {
 				case 0:
 					ctx.Set(stmt.key, key)
@@ -100,7 +103,7 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 			sub := r.Inherit()
 			err := sub.ExecuteWrapper(stmt.emptyWrapper)
 			if err != nil {
-				// pass error up the execution stack
+				// pass error up the call stack
 				panic(err)
 			}
 		}
@@ -135,22 +138,22 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 		loop.RevIndex0 = length - (idx + 1)
 
 		if idx == 0 {
-			loop.PrevItem = exec.AsValue(nil)
+			loop.PrevItem = exec.NewNilValue()
 		} else {
 			pp := items.Pairs[idx-1]
 			if pp.Value != nil {
-				loop.PrevItem = exec.AsValue([2]*exec.Value{pp.Key, pp.Value})
+				loop.PrevItem = r.ValueVactory.NewValue([2]exec.Value{pp.Key, pp.Value}, false)
 			} else {
 				loop.PrevItem = pp.Key
 			}
 		}
 
 		if idx == length-1 {
-			loop.NextItem = exec.AsValue(nil)
+			loop.NextItem = exec.NewNilValue()
 		} else {
 			np := items.Pairs[idx+1]
 			if np.Value != nil {
-				loop.NextItem = exec.AsValue([2]*exec.Value{np.Key, np.Value})
+				loop.NextItem = r.ValueVactory.NewValue([2]exec.Value{np.Key, np.Value}, false)
 			} else {
 				loop.NextItem = np.Key
 			}
@@ -159,7 +162,7 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 		// Render elements with updated context
 		err := sub.ExecuteWrapper(stmt.bodyWrapper)
 		if err != nil {
-			// pass error up the execution stack
+			// pass error up the call stack
 			panic(err)
 		}
 	}
@@ -172,19 +175,19 @@ func forParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	var valueToken *parse.Token
 	keyToken := args.Match(parse.TokenName)
 	if keyToken == nil {
-		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "expected an key identifier as first argument for 'for'-tag")
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected an key identifier as first argument for 'for'-tag")
 	}
 
 	if args.Match(parse.TokenComma) != nil {
 		// Value name is provided
 		valueToken = args.Match(parse.TokenName)
 		if valueToken == nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "value name must be an identifier")
+			errors.ThrowSyntaxError(p.Current().ErrorToken(), "value name must be an identifier")
 		}
 	}
 
 	if args.MatchName("in") == nil {
-		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "expected keyword 'in' after key name")
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected keyword 'in' after key name")
 	}
 
 	objectEvaluator := args.ParseExpression()
@@ -200,7 +203,7 @@ func forParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	}
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "malformed for-loop args")
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "malformed for-loop args")
 	}
 
 	// Body wrapping
@@ -208,7 +211,7 @@ func forParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt.bodyWrapper = wrapper
 
 	if !endargs.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "arguments not allowed here")
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "arguments not allowed here")
 	}
 
 	if wrapper.EndTag == "else" {
@@ -217,7 +220,7 @@ func forParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 		stmt.emptyWrapper = wrapper
 
 		if !endargs.End() {
-			errors.ThrowSyntaxError(parse.AsErrorToken(p.Current()), "arguments not allowed here")
+			errors.ThrowSyntaxError(p.Current().ErrorToken(), "arguments not allowed here")
 		}
 	}
 

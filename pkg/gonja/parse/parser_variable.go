@@ -5,26 +5,26 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/aisbergg/gonja/internal/log/parse"
+	debug "github.com/aisbergg/gonja/internal/debug/parse"
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
 )
 
 // parseNumber parses a number.
 func (p *Parser) parseNumber() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 	t := p.Match(TokenInteger, TokenFloat)
 	if t == nil {
-		errors.ThrowSyntaxError(AsErrorToken(t), "expected a number")
+		errors.ThrowSyntaxError(t.ErrorToken(), "expected a number")
 	}
 
 	if t.Type == TokenInteger {
 		i, err := strconv.Atoi(t.Val)
 		if err != nil {
-			errors.ThrowSyntaxError(AsErrorToken(p.Current()), err.Error())
+			errors.ThrowSyntaxError(p.Current().ErrorToken(), err.Error())
 		}
 		nr := &IntegerNode{
 			Location: t,
@@ -34,37 +34,35 @@ func (p *Parser) parseNumber() Expression {
 	}
 	f, err := strconv.ParseFloat(t.Val, 64)
 	if err != nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), err.Error())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), err.Error())
 	}
-	fr := &FloatNode{
+	return &FloatNode{
 		Location: t,
 		Val:      f,
 	}
-	return fr
 }
 
 // parseString parses a string.
 func (p *Parser) parseString() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 	t := p.Match(TokenString)
 	if t == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected a string")
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected a string")
 	}
 	str := strconv.Quote(t.Val)
 	replaced := strings.Replace(str, `\\`, `\`, -1)
 	newstr, err := strconv.Unquote(replaced)
 	if err != nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), err.Error())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), err.Error())
 	}
-	sr := &StringNode{
+	return &StringNode{
 		Location: t,
 		Val:      newstr,
 	}
-	return sr
 }
 
 // parseCollection parses a collection.
@@ -83,14 +81,14 @@ func (p *Parser) parseCollection() Expression {
 
 // parseList parses a list.
 func (p *Parser) parseList() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 	t := p.Match(TokenLbracket)
 	if t == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s', expected '['", t.Val)
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s', expected '['", t.Val)
 	}
 
 	if p.Match(TokenRbracket) != nil {
@@ -108,13 +106,13 @@ func (p *Parser) parseList() Expression {
 		}
 		expr := p.ParseExpression()
 		if expr == nil {
-			errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected a value")
+			errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected a value")
 		}
 		list = append(list, expr)
 	}
 
 	if p.Match(TokenRbracket) == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s', expected ']'", t.Val)
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s', expected ']'", t.Val)
 	}
 
 	return &ListNode{t, list}
@@ -122,14 +120,14 @@ func (p *Parser) parseList() Expression {
 
 // parseTuple parses a tuple.
 func (p *Parser) parseTuple() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 	t := p.Match(TokenLparen)
 	if t == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s', expected '('", t.Val)
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s', expected '('", t.Val)
 	}
 	expr := p.ParseExpression()
 	list := []Expression{expr}
@@ -144,13 +142,13 @@ func (p *Parser) parseTuple() Expression {
 		}
 		expr := p.ParseExpression()
 		if expr == nil {
-			errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected a value")
+			errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected a value")
 		}
 		list = append(list, expr)
 	}
 
 	if p.Match(TokenRparen) == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unbalanced parenthesis '()'")
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unbalanced parenthesis '()'")
 	}
 
 	if len(list) > 1 || trailingComa {
@@ -161,15 +159,15 @@ func (p *Parser) parseTuple() Expression {
 
 // parsePair parses a pair.
 func (p *Parser) parsePair() *PairNode {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 	key := p.ParseExpression()
 
 	if p.Match(TokenColon) == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s', expected ':'", p.Current())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s', expected ':'", p.Current())
 	}
 	value := p.ParseExpression()
 	return &PairNode{
@@ -180,14 +178,14 @@ func (p *Parser) parsePair() *PairNode {
 
 // parseDict parses a dict.
 func (p *Parser) parseDict() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 	t := p.Match(TokenLbrace)
 	if t == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s', expected '{'", p.Current())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s', expected '{'", p.Current())
 	}
 
 	dict := &DictNode{
@@ -206,7 +204,7 @@ func (p *Parser) parseDict() Expression {
 	}
 
 	if p.Match(TokenRbrace) == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s', expected '}'", p.Current())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s', expected '}'", p.Current())
 	}
 
 	return dict
@@ -214,15 +212,15 @@ func (p *Parser) parseDict() Expression {
 
 // ParseVariable parses a variable.
 func (p *Parser) ParseVariable() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	t := p.Match(TokenName)
 	if t == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected an identifier")
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected an identifier")
 	}
 
 	switch t.Val {
@@ -250,7 +248,7 @@ func (p *Parser) ParseVariable() Expression {
 			}
 			tok := p.Match(TokenName, TokenInteger)
 			if tok == nil {
-				errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected an identifier or an integer")
+				errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected an identifier or an integer")
 			}
 			switch tok.Type {
 			case TokenName:
@@ -258,11 +256,11 @@ func (p *Parser) ParseVariable() Expression {
 			case TokenInteger:
 				i, err := strconv.Atoi(tok.Val)
 				if err != nil {
-					errors.ThrowSyntaxError(AsErrorToken(p.Current()), err.Error())
+					errors.ThrowSyntaxError(p.Current().ErrorToken(), err.Error())
 				}
 				getitem.Index = i
 			default:
-				panic(fmt.Errorf("BUG: token '%s' not allowed here.", p.Current()))
+				panic(fmt.Errorf("[BUG] token '%s' not allowed here.", p.Current()))
 			}
 			variable = getitem
 			continue
@@ -274,7 +272,7 @@ func (p *Parser) ParseVariable() Expression {
 			}
 			tok := p.Match(TokenString, TokenInteger)
 			if tok == nil {
-				errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected a string or an integer")
+				errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected a string or an integer")
 			}
 			switch tok.Type {
 			case TokenString:
@@ -282,16 +280,16 @@ func (p *Parser) ParseVariable() Expression {
 			case TokenInteger:
 				i, err := strconv.Atoi(tok.Val)
 				if err != nil {
-					errors.ThrowSyntaxError(AsErrorToken(p.Current()), err.Error())
+					errors.ThrowSyntaxError(p.Current().ErrorToken(), err.Error())
 
 				}
 				getitem.Index = i
 			default:
-				panic(fmt.Errorf("BUG: token '%s' not allowed here", p.Current()))
+				panic(fmt.Errorf("[BUG] token '%s' not allowed here", p.Current()))
 			}
 			variable = getitem
 			if p.Match(TokenRbracket) == nil {
-				errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unbalanced bracket '[]'")
+				errors.ThrowSyntaxError(p.Current().ErrorToken(), "unbalanced bracket '[]'")
 			}
 			continue
 
@@ -331,15 +329,15 @@ func (p *Parser) ParseVariable() Expression {
 
 // ParseVariableOrLiteral parses a variable or a literal.
 func (p *Parser) ParseVariableOrLiteral() Expression {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 	t := p.Current()
 
 	if t == nil {
-		errors.ThrowSyntaxError(AsErrorToken(t), "unexpected EOF, expected a number, string, keyword or identifier")
+		errors.ThrowSyntaxError(t.ErrorToken(), "unexpected EOF, expected a number, string, keyword or identifier")
 	}
 
 	// Is first part a number or a string, there's nothing to resolve (because there's only to return the value then)
@@ -357,6 +355,6 @@ func (p *Parser) ParseVariableOrLiteral() Expression {
 		return p.ParseVariable()
 	}
 
-	errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected a number, string, keyword or identifier")
+	errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected a number, string, keyword or identifier")
 	return nil
 }

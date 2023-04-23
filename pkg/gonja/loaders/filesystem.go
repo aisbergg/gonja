@@ -1,153 +1,169 @@
 package loaders
 
 import (
-	"bytes"
+	"bufio"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
+	"github.com/aisbergg/gonja/pkg/gonja/exec"
+	"golang.org/x/text/encoding"
 )
 
-// FilesystemLoader represents a local filesystem loader with basic
-// BaseDirectory capabilities. The access to the local filesystem is unrestricted.
+// FilesystemLoader represents a local filesystem loader for templates.
+//
+// Search paths can be relative or absolute. Relative paths are relative to the
+// current working directory.
+//
+// If you want to improve performance, you can use the [CachedLoader] to cache the loaded templates. Simply wrap the
+// FilesystemLoader with the CachedLoader like this:
+//
+//	loader := loaders.NewCachedLoader(loaders.MustNewFileSystemLoader("templates"))
 type FilesystemLoader struct {
-	root string
+	searchPaths    []string
+	encoding       encoding.Encoding
+	followingLinks bool
 }
 
-// MustNewFileSystemLoader creates a new FilesystemLoader instance
-// and panics if there's any error during instantiation. The parameters
-// are the same like NewFileSystemLoader.
-func MustNewFileSystemLoader(root string) *FilesystemLoader {
-	fs, err := NewFileSystemLoader(root)
+// MustNewFileSystemLoader creates a new FilesystemLoader. It panics if an error
+// occurs.
+func MustNewFileSystemLoader(searchPaths ...string) *FilesystemLoader {
+	fs, err := NewFileSystemLoader(searchPaths...)
 	if err != nil {
 		panic(err)
 	}
 	return fs
 }
 
-// NewFileSystemLoader creates a new FilesystemLoader and allows
-// templatesto be loaded from disk (unrestricted). If any base directory
-// is given (or being set using SetBaseDir), this base directory is being used
-// for path calculation in template inclusions/imports. Otherwise the path
-// is calculated based relatively to the including template's path.
-func NewFileSystemLoader(root string) (*FilesystemLoader, error) {
-	fs := &FilesystemLoader{}
-	if root != "" {
-		if err := fs.SetBaseDir(root); err != nil {
-			return nil, err
-		}
-	}
-	return fs, nil
+// NewFileSystemLoader creates a new [FilesystemLoader].
+func NewFileSystemLoader(searchPaths ...string) (*FilesystemLoader, error) {
+	return NewFileSystemLoaderWithOptions(nil, false, searchPaths...)
 }
 
-// SetBaseDir sets the template's base directory. This directory will
-// be used for any relative path in filters, tags and From*-functions to determine
-// your template. See the comment for NewFileSystemLoader as well.
-func (fs *FilesystemLoader) SetBaseDir(path string) error {
-	// Make the path absolute
-	if !filepath.IsAbs(path) {
-		abs, err := filepath.Abs(path)
+// MustNewFileSystemLoaderWithOptions creates a new FilesystemLoader with the
+// given options. It panics if an error occurs.
+func MustNewFileSystemLoaderWithOptions(
+	encoding encoding.Encoding,
+	followLinks bool,
+	searchPaths ...string,
+) *FilesystemLoader {
+	fs, err := NewFileSystemLoaderWithOptions(encoding, followLinks, searchPaths...)
+	if err != nil {
+		panic(err)
+	}
+	return fs
+}
+
+// NewFileSystemLoaderWithOptions creates a new [FilesystemLoader] with the
+// given options. Mind that the files are searched in the order of the given
+// search paths.
+//
+//   - encoding: The encoding of the template files. If nil, the default
+//     encoding is used.
+//   - followLinks: If true, symlinks are followed.
+//   - searchPaths: The paths to search for templates. The paths can be relative
+//     or absolute. Relative paths are relative to the current working directory.
+func NewFileSystemLoaderWithOptions(
+	encoding encoding.Encoding,
+	followLinks bool,
+	searchPaths ...string,
+) (loader *FilesystemLoader, err error) {
+	if len(searchPaths) == 0 {
+		return nil, errors.NewTemplateLoadError("", "no search paths given")
+	}
+
+	// make search paths absolute
+	for i, path := range searchPaths {
+		searchPaths[i], err = filepath.Abs(path)
 		if err != nil {
-			return err
+			return nil, errors.NewTemplateLoadError(path, "failed to make the given path '%s' absolute: %s", path, err)
 		}
-		path = abs
 	}
 
-	// Check for existence
-	fi, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if !fi.IsDir() {
-		return errors.Errorf("The given path '%s' is not a directory.", path)
-	}
-
-	fs.root = path
-	return nil
-}
-
-// Get reads the path's content from your local filesystem.
-func (fs *FilesystemLoader) Get(path string) (io.Reader, error) {
-	realPath, err := fs.Path(path)
-	if err != nil {
-		return nil, err
-	}
-	buf, err := ioutil.ReadFile(realPath)
-	if err != nil {
-		return nil, err
-	}
-	return bytes.NewReader(buf), nil
-}
-
-// Path resolves a filename relative to the base directory. Absolute paths are allowed.
-// When there's no base dir set, the absolute path to the filename
-// will be calculated based on either the provided base directory (which
-// might be a path of a template which includes another template) or
-// the current working directory.
-func (fs *FilesystemLoader) Path(name string) (string, error) {
-	if filepath.IsAbs(name) {
-		return name, nil
-	}
-
-	// root := fs.root
-	if fs.root == "" {
-		root, err := os.Getwd()
-		if err != nil {
-			return "", err
+	// remove duplicates and add to loader
+	cleaned := make([]string, 0, len(searchPaths))
+	seen := map[string]struct{}{}
+	for _, path := range searchPaths {
+		if _, ok := seen[path]; ok {
+			continue
 		}
-		return filepath.Join(root, name), nil
+		seen[path] = struct{}{}
+		cleaned = append(cleaned, path)
 	}
-	return filepath.Join(fs.root, name), nil
-}
 
-// SandboxedFilesystemLoader is still WIP.
-type SandboxedFilesystemLoader struct {
-	*FilesystemLoader
-}
-
-// NewSandboxedFilesystemLoader creates a new sandboxed local file system instance.
-func NewSandboxedFilesystemLoader(root string) (*SandboxedFilesystemLoader, error) {
-	fs, err := NewFileSystemLoader(root)
-	if err != nil {
-		return nil, err
-	}
-	return &SandboxedFilesystemLoader{
-		FilesystemLoader: fs,
+	return &FilesystemLoader{
+		searchPaths:    cleaned,
+		encoding:       encoding,
+		followingLinks: followLinks,
 	}, nil
 }
 
-// Move sandbox to a virtual fs
+// Load returns a template by name.
+func (fs *FilesystemLoader) Load(name string, cfg *exec.EvalConfig) (*exec.Template, error) {
+	name = filepath.Clean(name)
 
-/*
-if len(set.SandboxDirectories) > 0 {
-    defer func() {
-        // Remove any ".." or other crap
-        resolvedPath = filepath.Clean(resolvedPath)
+	// load file
+	reader, err := fs.loadFile(name)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	buf, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, errors.NewTemplateLoadError(name, "error loading template: %s", err)
+	}
 
-        // Make the path absolute
-        absPath, err := filepath.Abs(resolvedPath)
-        if err != nil {
-            panic(err)
-        }
-        resolvedPath = absPath
+	// parse template
+	tpl, err := exec.NewTemplate(name, string(buf), cfg)
+	if err != nil {
+		return nil, err
+	}
 
-        // Check against the sandbox directories (once one pattern matches, we're done and can allow it)
-        for _, pattern := range set.SandboxDirectories {
-            matched, err := filepath.Match(pattern, resolvedPath)
-            if err != nil {
-                panic("Wrong sandbox directory match pattern (see http://golang.org/pkg/path/filepath/#Match).")
-            }
-            if matched {
-                // OK!
-                return
-            }
-        }
-
-        // No pattern matched, we have to log+deny the request
-        set.logf("Access attempt outside of the sandbox directories (blocked): '%s'", resolvedPath)
-        resolvedPath = ""
-    }()
+	return tpl, nil
 }
-*/
+
+// loadFile goes through the search paths and returns the contents of the first
+// file that is found.
+func (fs *FilesystemLoader) loadFile(path string) (io.ReadCloser, error) {
+	// clean up path
+	path = filepath.Clean(path)
+
+	for _, searchPath := range fs.searchPaths {
+		absPath := filepath.Join(searchPath, path)
+		// check if path exists
+		stat, err := os.Stat(absPath)
+		if os.IsNotExist(err) {
+			continue
+		}
+		// check if path is a file
+		if !stat.Mode().IsRegular() {
+			continue
+		}
+		// check if path is a symlink
+		if !fs.followingLinks && stat.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+
+		// open file
+		file, err := os.Open(absPath)
+		if err != nil {
+			return nil, errors.NewTemplateLoadError(path, "failed to open file '%s': %s", path, err)
+		}
+		reader := bufio.NewReader(file)
+		if fs.encoding != nil {
+			// use configured encoding
+			decoder := fs.encoding.NewDecoder()
+			reader = bufio.NewReader(decoder.Reader(reader))
+		}
+
+		// return a ReadCloser that wraps the reader and the file
+		return struct {
+			io.Reader
+			io.Closer
+		}{reader, file}, nil
+	}
+
+	return nil, errors.NewTemplateNotFoundError(path)
+}

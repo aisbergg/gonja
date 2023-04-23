@@ -22,7 +22,7 @@ type flags struct {
 	IsTrue     bool
 }
 
-func (f *flags) assert(t *testing.T, value *exec.Value) {
+func (f *flags) assert(t *testing.T, value *exec.GenericValue) {
 	assert := testutils.NewAssert(t)
 
 	val := reflect.ValueOf(value)
@@ -63,12 +63,12 @@ var valueCases = []struct {
 	{"strings slice", []string{"a", "b", "c"}, "['a', 'b', 'c']", flags{IsTrue: true, IsIterable: true, IsList: true}},
 	{
 		"values slice",
-		[]*exec.Value{exec.AsValue(1), exec.AsValue(2), exec.AsValue(3)},
+		[]*exec.GenericValue{exec.AsValue(1), exec.AsValue(2), exec.AsValue(3)},
 		"[1, 2, 3]",
 		flags{IsTrue: true, IsIterable: true, IsList: true},
 	},
 	{"string values slice",
-		[]*exec.Value{exec.AsValue("a"), exec.AsValue("b"), exec.AsValue("c")},
+		[]*exec.GenericValue{exec.AsValue("a"), exec.AsValue("b"), exec.AsValue("c")},
 		"['a', 'b', 'c']",
 		flags{IsTrue: true, IsIterable: true, IsList: true},
 	},

@@ -80,7 +80,7 @@ func nowParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	// Timezone
 	tz := args.Match(parse.TokenString)
 	if tz == nil {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "now expect a timezone as first argument")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "now expect a timezone as first argument")
 	}
 	stmt.TZ = tz.Val
 
@@ -88,11 +88,11 @@ func nowParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	if sign := args.Match(parse.TokenAdd, parse.TokenSub); sign != nil {
 		offset := args.Match(parse.TokenString)
 		if offset == nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected an time offset")
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "expected an time offset")
 		}
 		timeOffset, err := parseTimeOffset(offset.Val, sign.Val == "+")
 		if err != nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unable to parse time offset '%s': %s", offset.Val, err)
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "unable to parse time offset '%s': %s", offset.Val, err)
 
 		}
 		stmt.Offset = timeOffset
@@ -102,13 +102,13 @@ func nowParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	if args.Match(parse.TokenComma) != nil {
 		format := args.Match(parse.TokenString)
 		if format == nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected a format string")
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "expected a format string")
 		}
 		stmt.Format = format.Val
 	}
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed now-tag args")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "malformed now-tag args")
 	}
 
 	return stmt

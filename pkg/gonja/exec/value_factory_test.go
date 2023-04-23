@@ -98,7 +98,7 @@ func TestValueGetItem(t *testing.T) {
 	}
 }
 
-func getValue(val *exec.Value, key any) (*exec.Value, bool) {
+func getValue(val *exec.GenericValue, key any) (*exec.GenericValue, bool) {
 	resolver := exec.NewResolver(gonja.Undefined, nil)
 	defer func() {
 		if r := recover(); r != nil {

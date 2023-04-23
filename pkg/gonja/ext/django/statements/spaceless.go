@@ -54,7 +54,7 @@ func spacelessParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	stmt.wrapper = wrapper
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "malformed spaceless-tag args")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "malformed spaceless-tag args")
 	}
 
 	return stmt

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	debug "github.com/aisbergg/gonja/internal/debug/exec"
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
 	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
@@ -33,26 +34,26 @@ func (ts *TrimState) TrimBlocks(r rune) bool {
 // Renderer is a node visitor in charge of rendering a template.
 type Renderer struct {
 	*EvalConfig
-	Ctx      *Context
-	Resolver *Resolver
-	Template *Template
-	Root     *parse.TemplateNode
-	Current  parse.Node
-	Out      *strings.Builder
-	Trim     *TrimState
+	Ctx          *Context
+	ValueVactory *ValueFactory
+	Template     *Template
+	Root         *parse.TemplateNode
+	Current      parse.Node
+	Out          *strings.Builder
+	Trim         *TrimState
 }
 
 // NewRenderer initialize a new renderer
-func NewRenderer(ctx *Context, resolver *Resolver, out *strings.Builder, cfg *EvalConfig, tpl *Template) *Renderer {
+func NewRenderer(ctx *Context, valueVactory *ValueFactory, out *strings.Builder, cfg *EvalConfig, tpl *Template) *Renderer {
 	var buffer strings.Builder
 	r := &Renderer{
-		EvalConfig: cfg,
-		Ctx:        ctx,
-		Resolver:   resolver,
-		Template:   tpl,
-		Root:       tpl.Root,
-		Out:        out,
-		Trim:       &TrimState{Buffer: &buffer},
+		EvalConfig:   cfg,
+		Ctx:          ctx,
+		ValueVactory: valueVactory,
+		Template:     tpl,
+		Root:         tpl.Root,
+		Out:          out,
+		Trim:         &TrimState{Buffer: &buffer},
 	}
 	r.Ctx.Set("self", Self(r))
 	return r
@@ -61,14 +62,14 @@ func NewRenderer(ctx *Context, resolver *Resolver, out *strings.Builder, cfg *Ev
 // Inherit creates a new sub renderer.
 func (r *Renderer) Inherit() *Renderer {
 	sub := &Renderer{
-		EvalConfig: r.EvalConfig.Inherit(),
-		Ctx:        r.Ctx.Inherit(),
-		Resolver:   r.Resolver,
-		Template:   r.Template,
-		Current:    r.Current,
-		Root:       r.Root,
-		Out:        r.Out,
-		Trim:       r.Trim,
+		EvalConfig:   r.EvalConfig.Inherit(),
+		Ctx:          r.Ctx.Inherit(),
+		ValueVactory: r.ValueVactory,
+		Template:     r.Template,
+		Current:      r.Current,
+		Root:         r.Root,
+		Out:          r.Out,
+		Trim:         r.Trim,
 	}
 	return sub
 }
@@ -115,8 +116,8 @@ func (r *Renderer) WriteString(txt string) int {
 }
 
 // RenderValue renders a single value.
-func (r *Renderer) RenderValue(value *Value) {
-	if r.Autoescape && value.IsString() && !value.Safe {
+func (r *Renderer) RenderValue(value Value) {
+	if r.Autoescape && value.IsString() && !value.IsSafe() {
 		r.WriteString(value.Escaped())
 	} else {
 		r.WriteString(value.String())
@@ -147,6 +148,12 @@ func (r *Renderer) Tag(trim *parse.Trim, lstrip bool) {
 // walk steps through the major pieces of the template structure and generates
 // the output.
 func (r *Renderer) walk(node parse.Node) {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("exec: %s", node.String())
+
 	r.Current = node
 	switch n := node.(type) {
 	case *parse.DataNode:
@@ -161,7 +168,7 @@ func (r *Renderer) walk(node parse.Node) {
 	case *parse.StatementBlockNode:
 		r.Tag(n.Trim, n.LStrip)
 		r.Trim.ShouldBlock = r.TrimBlocks
-		// Silently ignore non executable statements
+		// only execute executable statements, skip others
 		if stmt, ok := n.Stmt.(Statement); ok {
 			stmt.Execute(r, n)
 		}
@@ -180,7 +187,7 @@ func (r *Renderer) walk(node parse.Node) {
 		}
 
 	default:
-		panic(fmt.Errorf("BUG: cannot walk unknown node '%s'", r.Current))
+		panic(fmt.Errorf("[BUG] cannot walk unknown node '%s'", r.Current))
 	}
 }
 
@@ -193,7 +200,7 @@ func (r *Renderer) ExecuteWrapper(wrapper *parse.WrapperNode) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			if rerr, ok := rec.(errors.TemplateRuntimeError); ok {
-				rerr.Enrich(parse.AsErrorToken(sub.Current.Position()))
+				rerr.Enrich(sub.Current.Position().ErrorToken())
 				err = rerr
 			} else {
 				panic(rec)
@@ -215,7 +222,7 @@ func (r *Renderer) Execute() (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			if rerr, ok := rec.(errors.TemplateRuntimeError); ok {
-				rerr.Enrich(parse.AsErrorToken(r.Current.Position()))
+				rerr.Enrich(r.Current.Position().ErrorToken())
 				err = rerr
 			} else {
 				panic(rec)

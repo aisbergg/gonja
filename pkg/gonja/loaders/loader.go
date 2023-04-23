@@ -1,15 +1,11 @@
 package loaders
 
 import (
-	"io"
+	"github.com/aisbergg/gonja/pkg/gonja/exec"
 )
 
-// TemplateLoader allows to implement a virtual file system.
+// Loader is an interface for loading templates by name.
 type Loader interface {
-	// Abs calculates the path to a given template. Whenever a path must be resolved
-	// due to an import from another template, the base equals the parent template's path.
-	// Abs(base, name string) string
-
-	// Get returns an io.Reader where the template's content can be read from.
-	Get(path string) (io.Reader, error)
+	// Load returns a template by name.
+	Load(name string, cfg *exec.EvalConfig) (*exec.Template, error)
 }

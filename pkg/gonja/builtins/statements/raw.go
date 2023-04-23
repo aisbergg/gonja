@@ -10,8 +10,10 @@ import (
 
 type RawStmt struct {
 	Data *parse.DataNode
-	// Content string
 }
+
+var _ parse.Statement = (*RawStmt)(nil)
+var _ exec.Statement = (*RawStmt)(nil)
 
 func (stmt *RawStmt) Position() *parse.Token { return stmt.Data.Position() }
 func (stmt *RawStmt) String() string {
@@ -33,11 +35,11 @@ func rawParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	if ok {
 		stmt.Data = data
 	} else {
-		errors.ThrowSyntaxError(parse.AsErrorToken(node.Position()), "raw statement can only contains a single data node")
+		errors.ThrowSyntaxError(node.Position().ErrorToken(), "raw statement can only contains a single data node")
 	}
 
 	if !args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "raw statement doesn't accept parameters.")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "raw statement doesn't accept parameters.")
 	}
 
 	return stmt

@@ -7,9 +7,6 @@ require (
 	github.com/bmuller/arrow v0.0.0-20180318014521-b14bfde8dff2
 )
 
-require (
-	github.com/pkg/errors v0.8.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
-)
+require golang.org/x/text v0.9.0 // indirect
 
 replace github.com/aisbergg/gonja => ./../../../../

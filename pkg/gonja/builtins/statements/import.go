@@ -19,6 +19,9 @@ type ImportStmt struct {
 	Template     *parse.TemplateNode
 }
 
+var _ parse.Statement = (*ImportStmt)(nil)
+var _ exec.Statement = (*ImportStmt)(nil)
+
 // Position returns the position of the statement.
 func (stmt *ImportStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *ImportStmt) String() string {
@@ -34,7 +37,7 @@ func (stmt *ImportStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode)
 
 	if stmt.FilenameExpr != nil {
 		filename := r.Eval(stmt.FilenameExpr).String()
-		tpl, err := r.Loader.GetTemplate(filename)
+		tpl, err := r.TemplateLoadFn(filename)
 		if err != nil {
 			errors.ThrowTemplateRuntimeError("unable to load template '%s': %s", filename, err)
 		}
@@ -76,7 +79,7 @@ func (stmt *FromImportStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockN
 
 	if stmt.FilenameExpr != nil {
 		filename := r.Eval(stmt.FilenameExpr).String()
-		tpl, err := r.Loader.GetTemplate(filename)
+		tpl, err := r.TemplateLoadFn(filename)
 		if err != nil {
 			errors.ThrowTemplateRuntimeError("unable to load template '%s': %s", filename, err)
 		}
@@ -100,7 +103,7 @@ func importParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	}
 
 	if args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "you must at least specify one macro to import.")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "you must at least specify one macro to import.")
 	}
 
 	if tok := args.Match(parse.TokenString); tok != nil {
@@ -110,12 +113,12 @@ func importParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 		stmt.FilenameExpr = expr
 	}
 	if args.MatchName("as") == nil {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected 'as' keyword, got '%s'", args.Current().Val)
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "expected 'as' keyword, got '%s'", args.Current().Val)
 	}
 
 	alias := args.Match(parse.TokenName)
 	if alias == nil {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected macro alias name (identifier), got '%s'", args.Current().Val)
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "expected macro alias name (identifier), got '%s'", args.Current().Val)
 	}
 	stmt.As = alias.Val
 
@@ -129,9 +132,9 @@ func importParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 
 	// Preload static template
 	if stmt.Filename != "" {
-		tpl, err := p.TemplateParser(stmt.Filename)
+		tpl, err := p.TemplateParseFn(stmt.Filename)
 		if err != nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unable to parse imported template '%s'", stmt.Filename)
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "unable to parse imported template '%s'", stmt.Filename)
 		}
 		stmt.Template = tpl
 	}
@@ -147,7 +150,7 @@ func fromParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	}
 
 	if args.End() {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "you must at least specify one macro to import")
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "you must at least specify one macro to import")
 	}
 
 	if tok := args.Match(parse.TokenString); tok != nil {
@@ -158,20 +161,20 @@ func fromParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	}
 
 	if args.MatchName("import") == nil {
-		errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected 'import' keyword, got '%s'", args.Current().Val)
+		errors.ThrowSyntaxError(args.Current().ErrorToken(), "expected 'import' keyword, got '%s'", args.Current().Val)
 	}
 
 	for !args.End() {
 		name := args.Match(parse.TokenName)
 		if name == nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected macro name (identifier), got '%s'", args.Current().Val)
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "expected macro name (identifier), got '%s'", args.Current().Val)
 		}
 
 		// asName := macroNameToken.Val
 		if args.MatchName("as") != nil {
 			alias := args.Match(parse.TokenName)
 			if alias == nil {
-				errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "expected macro alias name (identifier), got '%s'", args.Current().Val)
+				errors.ThrowSyntaxError(args.Current().ErrorToken(), "expected macro alias name (identifier), got '%s'", args.Current().Val)
 			}
 			// asName = aliasToken.Val
 			stmt.As[alias.Val] = name.Val
@@ -200,15 +203,15 @@ func fromParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 		}
 
 		if args.Match(parse.TokenComma) == nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unexpected '%s', expected ','", args.Current().Val)
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "unexpected '%s', expected ','", args.Current().Val)
 		}
 	}
 
 	// Preload static template
 	if stmt.Filename != "" {
-		tpl, err := p.TemplateParser(stmt.Filename)
+		tpl, err := p.TemplateParseFn(stmt.Filename)
 		if err != nil {
-			errors.ThrowSyntaxError(parse.AsErrorToken(args.Current()), "unable to parse imported template '%s'", stmt.Filename)
+			errors.ThrowSyntaxError(args.Current().ErrorToken(), "unable to parse imported template '%s'", stmt.Filename)
 		}
 		stmt.Template = tpl
 	}

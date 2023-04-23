@@ -22,8 +22,6 @@ package exec
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
-
 	"github.com/aisbergg/gonja/pkg/gonja/parse"
 )
 
@@ -45,7 +43,7 @@ import (
 // See RegisterTag()'s documentation for more information about
 // writing a tag as well.
 
-// type StatementExecutor func(*parse.Node, *ExecutionContext) *Value
+// type StatementExecutor func(*parse.Node, *ExecutionContext) Value
 
 type Statement interface {
 	parse.Statement
@@ -64,7 +62,7 @@ func (ss StatementSet) Exists(name string) bool {
 // tag's init() function: http://golang.org/doc/effective_go.html#init
 func (ss *StatementSet) Register(name string, parser parse.StatementParser) error {
 	if ss.Exists(name) {
-		return errors.Errorf("Statement '%s' is already registered", name)
+		return fmt.Errorf("statement '%s' is already registered", name)
 	}
 	(*ss)[name] = parser
 	return nil
@@ -73,7 +71,7 @@ func (ss *StatementSet) Register(name string, parser parse.StatementParser) erro
 // MustRegister is like Register but panics if the tag cannot be registered.
 func (ss *StatementSet) MustRegister(name string, parser parse.StatementParser) {
 	if err := ss.Register(name, parser); err != nil {
-		panic(fmt.Sprintf("BUG: unable to register '%s' statement: %s", name, err))
+		panic(fmt.Errorf("unable to register '%s' statement: %s", name, err))
 	}
 }
 
@@ -82,7 +80,7 @@ func (ss *StatementSet) MustRegister(name string, parser parse.StatementParser) 
 // behavior.
 func (ss *StatementSet) Replace(name string, parser parse.StatementParser) error {
 	if !ss.Exists(name) {
-		return errors.Errorf("Statement '%s' does not exist (therefore cannot be overridden)", name)
+		return fmt.Errorf("statement '%s' does not exist (therefore cannot be overridden)", name)
 	}
 	(*ss)[name] = parser
 	return nil

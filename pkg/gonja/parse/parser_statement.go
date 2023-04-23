@@ -1,7 +1,7 @@
 package parse
 
 import (
-	log "github.com/aisbergg/gonja/internal/log/parse"
+	debug "github.com/aisbergg/gonja/internal/debug/parse"
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
 )
 
@@ -9,26 +9,26 @@ type StatementParser func(parser *Parser, args *Parser) Statement
 
 // Tag = "{%" IDENT ARGS "%}"
 func (p *Parser) ParseStatement() Statement {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	if p.Match(TokenBlockBegin) == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s' , expected '{%%'", p.Current())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s' , expected '{%%'", p.Current())
 	}
 
 	name := p.Match(TokenName)
 	if name == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected statement name, got '%s'", p.Current())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected statement name, got '%s'", p.Current())
 	}
 
 	// Check for the existing statement
 	stmtParser, exists := p.Statements[name.Val]
 	if !exists {
 		// Does not exists
-		errors.ThrowSyntaxError(AsErrorToken(name), "statement '%s' not found (or beginning not provided)", name)
+		errors.ThrowSyntaxError(name.ErrorToken(), "statement '%s' not found (or beginning not provided)", name)
 	}
 
 	// Check sandbox tag restriction
@@ -49,7 +49,7 @@ func (p *Parser) ParseStatement() Statement {
 	// }
 
 	if p.Match(TokenBlockEnd) == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected end of block '%s'", p.Config.BlockEndString)
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected end of block '%s'", p.Config.BlockEndString)
 	}
 
 	argParser := NewParser(p.Config, NewStream(args))
@@ -67,27 +67,27 @@ func (p *Parser) ParseStatement() Statement {
 // type StatementParser func(parser *Parser, args *Parser) (Stmt, error)
 
 func (p *Parser) ParseStatementBlock() *StatementBlockNode {
-	if log.Enabled {
-		fm := log.FuncMarker()
+	if debug.Enabled {
+		fm := debug.FuncMarker()
 		defer fm.End()
 	}
-	log.Print("parse: %s", p.Current())
+	debug.Print("parse: %s", p.Current())
 
 	begin := p.Match(TokenBlockBegin)
 	if begin == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "unexpected '%s', expected '%s'", p.Current(), p.Config.BlockStartString)
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s', expected '%s'", p.Current(), p.Config.BlockStartString)
 	}
 
 	name := p.Match(TokenName)
 	if name == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected statement name, got '%s'", p.Current())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected statement name, got '%s'", p.Current())
 	}
 
 	// Check for the existing statement
 	stmtParser, exists := p.Statements[name.Val]
 	if !exists {
 		// Does not exists
-		errors.ThrowSyntaxError(AsErrorToken(name), "statement '%s' not found (or beginning not provided)", name.Val)
+		errors.ThrowSyntaxError(name.ErrorToken(), "statement '%s' not found (or beginning not provided)", name.Val)
 	}
 
 	// Check sandbox tag restriction
@@ -95,7 +95,7 @@ func (p *Parser) ParseStatementBlock() *StatementBlockNode {
 	// 	return nil, p.Error(fmt.Sprintf("Usage of statement '%s' is not allowed (sandbox restriction active).", tokenName.Val), tokenName)
 	// }
 
-	log.Print("find args token")
+	debug.Print("find args token")
 	var args []*Token
 	for p.Peek(TokenBlockEnd) == nil && !p.Stream.End() {
 		// Add token to args
@@ -110,11 +110,11 @@ func (p *Parser) ParseStatementBlock() *StatementBlockNode {
 
 	end := p.Match(TokenBlockEnd)
 	if end == nil {
-		errors.ThrowSyntaxError(AsErrorToken(p.Current()), "expected end of block '%s'", p.Config.BlockEndString)
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected end of block '%s'", p.Config.BlockEndString)
 	}
 
 	stream := NewStream(args)
-	log.Print("argparser")
+	debug.Print("argparser")
 	argParser := NewParser(p.Config, stream)
 	// argParser := newParser(p.name, argsToken, p.template)
 	// if len(argsToken) == 0 {
@@ -125,7 +125,7 @@ func (p *Parser) ParseStatementBlock() *StatementBlockNode {
 	// p.template.level++
 	// defer func() { p.template.level-- }()
 	stmt := stmtParser(p, argParser)
-	log.Print("parsed expression: %s", stmt)
+	debug.Print("parsed expression: %s", stmt)
 	return &StatementBlockNode{
 		Location: begin,
 		Name:     name.Val,

@@ -32,7 +32,7 @@ func testVAFirst(t *testing.T) {
 		defer failsafe(t)
 		assert := testutils.NewAssert(t)
 
-		va := exec.VarArgs{Args: []*exec.Value{exec.AsValue(42)}}
+		va := exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42)}}
 		first := va.First()
 		assert.Equal(42, first.Integer())
 	})
@@ -66,11 +66,11 @@ var nothingCases = []struct {
 }{
 	{"got nothing", &exec.VarArgs{}, ""}, {
 		"got an argument",
-		&exec.VarArgs{Args: []*exec.Value{exec.AsValue(42)}},
+		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42)}},
 		`Unexpected argument '42'`,
 	}, {
 		"got multiples arguments",
-		&exec.VarArgs{Args: []*exec.Value{exec.AsValue(42), exec.AsValue(7)}},
+		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(7)}},
 		`Unexpected arguments '42, 7'`,
 	}, {
 		"got a keyword argument",
@@ -88,7 +88,7 @@ var nothingCases = []struct {
 	}, {
 		"got one of each",
 		&exec.VarArgs{
-			Args: []*exec.Value{exec.AsValue(42)},
+			Args: []*exec.GenericValue{exec.AsValue(42)},
 			Kwargs: []exec.KVPair{
 				{"key", exec.AsValue(42)},
 			},
@@ -105,11 +105,11 @@ var argsCases = []struct {
 }{
 	{
 		"got expected",
-		&exec.VarArgs{Args: []*exec.Value{exec.AsValue(42), exec.AsValue(7)}},
+		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(7)}},
 		2, "",
 	}, {
 		"got less arguments",
-		&exec.VarArgs{Args: []*exec.Value{exec.AsValue(42)}},
+		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42)}},
 		2, `Expected 2 arguments, got 1`,
 	}, {
 		"got less arguments (singular)",
@@ -117,12 +117,12 @@ var argsCases = []struct {
 		1, `Expected an argument, got 0`,
 	}, {
 		"got more arguments",
-		&exec.VarArgs{Args: []*exec.Value{exec.AsValue(42), exec.AsValue(7)}},
+		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(7)}},
 		1, `Unexpected argument '7'`,
 	}, {
 		"got a keyword argument",
 		&exec.VarArgs{
-			Args: []*exec.Value{exec.AsValue(42)},
+			Args: []*exec.GenericValue{exec.AsValue(42)},
 			Kwargs: []exec.KVPair{
 				{"key", exec.AsValue(42)},
 			},
@@ -150,7 +150,7 @@ var kwargsCases = []struct {
 		"",
 	}, {
 		"got unexpected arguments",
-		&exec.VarArgs{Args: []*exec.Value{exec.AsValue(42), exec.AsValue(7), exec.AsValue("unexpected")}},
+		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(7), exec.AsValue("unexpected")}},
 		[]*exec.Kwarg{
 			{"key", "default key"},
 			{"other", "default other"},
@@ -191,7 +191,7 @@ var mixedArgsKwargsCases = []struct {
 	{
 		"got expected",
 		&exec.VarArgs{
-			Args: []*exec.Value{exec.AsValue(42)},
+			Args: []*exec.GenericValue{exec.AsValue(42)},
 			Kwargs: []exec.KVPair{
 				{"key", exec.AsValue(42)},
 				{"other", exec.AsValue(7)},
@@ -203,7 +203,7 @@ var mixedArgsKwargsCases = []struct {
 			{"other", "default other"},
 		},
 		&exec.VarArgs{
-			Args: []*exec.Value{exec.AsValue(42)},
+			Args: []*exec.GenericValue{exec.AsValue(42)},
 			Kwargs: []exec.KVPair{
 				{"key", exec.AsValue(42)},
 				{"other", exec.AsValue(7)},
@@ -213,14 +213,14 @@ var mixedArgsKwargsCases = []struct {
 	},
 	{
 		"fill with default",
-		&exec.VarArgs{Args: []*exec.Value{exec.AsValue(42)}},
+		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42)}},
 		1,
 		[]*exec.Kwarg{
 			{"key", "default key"},
 			{"other", "default other"},
 		},
 		&exec.VarArgs{
-			Args: []*exec.Value{exec.AsValue(42)},
+			Args: []*exec.GenericValue{exec.AsValue(42)},
 			Kwargs: []exec.KVPair{
 				{"key", exec.AsValue("default key")},
 				{"other", exec.AsValue("default other")},
@@ -231,7 +231,7 @@ var mixedArgsKwargsCases = []struct {
 	{
 		"keyword as argument",
 		&exec.VarArgs{
-			Args: []*exec.Value{exec.AsValue(42), exec.AsValue(42)},
+			Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(42)},
 			Kwargs: []exec.KVPair{
 				{"other", exec.AsValue(7)},
 			},
@@ -242,7 +242,7 @@ var mixedArgsKwargsCases = []struct {
 			{"other", "default other"},
 		},
 		&exec.VarArgs{
-			Args: []*exec.Value{exec.AsValue(42)},
+			Args: []*exec.GenericValue{exec.AsValue(42)},
 			Kwargs: []exec.KVPair{
 				{"key", exec.AsValue(42)},
 				{"other", exec.AsValue(7)},
@@ -253,7 +253,7 @@ var mixedArgsKwargsCases = []struct {
 	{
 		"keyword submitted twice",
 		&exec.VarArgs{
-			Args: []*exec.Value{exec.AsValue(42), exec.AsValue(5)},
+			Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(5)},
 			Kwargs: []exec.KVPair{
 				{"key", exec.AsValue(42)},
 				{"other", exec.AsValue(7)},
@@ -265,7 +265,7 @@ var mixedArgsKwargsCases = []struct {
 			{"other", "default other"},
 		},
 		&exec.VarArgs{
-			Args: []*exec.Value{exec.AsValue(42), exec.AsValue(5)},
+			Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(5)},
 			Kwargs: []exec.KVPair{
 				{"key", exec.AsValue(42)},
 				{"other", exec.AsValue(7)},

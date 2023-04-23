@@ -9,19 +9,20 @@ import (
 // KVPair represents a key/value pair.
 type KVPair struct {
 	Key   string
-	Value *Value
+	Value Value
 }
 
 // VarArgs represents pythonic variadic args/kwargs.
 type VarArgs struct {
-	Args   []*Value
-	Kwargs []KVPair
+	Args         []Value
+	Kwargs       []KVPair
+	ValueFactory *ValueFactory
 }
 
 // NewVarArgs creates a new VarArgs.
-func NewVarArgs() *VarArgs {
+func NewVarArgs(valueFactory *ValueFactory) *VarArgs {
 	return &VarArgs{
-		Args:   []*Value{},
+		Args:   []Value{},
 		Kwargs: make([]KVPair, 0),
 	}
 }
@@ -39,11 +40,11 @@ func (va *VarArgs) String() string {
 }
 
 // First returns the first argument or nil AsValue.
-func (va *VarArgs) First() *Value {
+func (va *VarArgs) First() Value {
 	if len(va.Args) > 0 {
 		return va.Args[0]
 	}
-	return AsValue(nil)
+	return NewNilValue()
 }
 
 // HasKwarg returns true if the keyword argument exists.
@@ -56,18 +57,20 @@ func (va *VarArgs) HasKwarg(key string) bool {
 	return false
 }
 
-// GetKwarg gets a keyword arguments with fallback on default value.
-func (va *VarArgs) GetKwarg(key string, fallback any) *Value {
+// GetKwarg gets a keyword argument. It panics if the keyword argument does not
+// exist. Make sure to define all the expected keyword arguments before calling
+// this.
+func (va *VarArgs) GetKwarg(key string) Value {
 	for _, kv := range va.Kwargs {
 		if kv.Key == key {
 			return kv.Value
 		}
 	}
-	return AsValue(fallback)
+	panic(fmt.Errorf("[BUG] keyword argument %s does not exist", key))
 }
 
 // SetKwarg sets a keyword argument
-func (va *VarArgs) SetKwarg(key string, value *Value) {
+func (va *VarArgs) SetKwarg(key string, value Value) {
 	for i, kv := range va.Kwargs {
 		if kv.Key == key {
 			va.Kwargs[i].Value = value
@@ -84,7 +87,7 @@ func (va *VarArgs) setDefaultKwarg(key string, value any) {
 			return
 		}
 	}
-	va.Kwargs = append(va.Kwargs, KVPair{Key: key, Value: AsValue(value)})
+	va.Kwargs = append(va.Kwargs, KVPair{Key: key, Value: va.ValueFactory.NewValue(value, false)})
 }
 
 // Kwarg represents a keyword argument.
