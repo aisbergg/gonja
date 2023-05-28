@@ -21,6 +21,7 @@ import (
 func TestEnv(root string) *gonja.Environment {
 	env := gonja.NewEnvironment(
 		gonja.OptLoader(loaders.MustNewFileSystemLoader(root)),
+
 		gonja.OptKeepTrailingNewline(),
 		gonja.OptAutoescape(),
 		gonja.OptSetGlobal("lorem", u.LoremIpsum), // Predictable random content
@@ -69,7 +70,7 @@ func GlobTemplateTests(t *testing.T, root string, env *gonja.Environment) {
 				if err != nil {
 					t.Fatalf("failed to compute diff for %s:\n%s", testFilename, err.Error())
 				}
-				t.Errorf("%s rendered with diff:\n%v", testFilename, d)
+				t.Errorf("%s rendered with diff:\n%s", testFilename, string(d))
 			}
 		})
 	}

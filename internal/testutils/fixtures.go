@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-
 	"strings"
 	"time"
 
@@ -14,9 +13,16 @@ import (
 
 var adminList = []string{"user2"}
 
-var time1 = time.Date(2014, 06, 10, 15, 30, 15, 0, time.UTC)
-var time2 = time.Date(2011, 03, 21, 8, 37, 56, 12, time.UTC)
-var valueVactory = exec.NewValueFactory(gonja.Undefined, map[reflect.Type]exec.ValueFunc{})
+var (
+	time1        = time.Date(2014, 0o6, 10, 15, 30, 15, 0, time.UTC)
+	time2        = time.Date(2011, 0o3, 21, 8, 37, 56, 12000, time.UTC)
+	ValueVactory = exec.NewValueFactory(gonja.StrictUndefined, map[reflect.Type]exec.ValueFunc{})
+	NewValue     = ValueVactory.Value
+	NewSafeValue = ValueVactory.SafeValue
+	NewVarArgs   = func(args []exec.Value, kwargs []exec.KVPair) *exec.VarArgs {
+		return exec.NewVarArgsWithValues(ValueVactory, args, kwargs)
+	}
+)
 
 type post struct {
 	Text    string
@@ -54,7 +60,7 @@ func isAdmin(u *user) bool {
 }
 
 func (u *user) IsAdmin() exec.Value {
-	return valueVactory.NewValue(isAdmin(u), false)
+	return ValueVactory.Value(isAdmin(u))
 }
 
 func (u *user) IsAdmin2() bool {
@@ -143,7 +149,7 @@ Yep!`,
 			for _, i := range args {
 				s += i.Integer()
 			}
-			return valueVactory.NewValue(s, false)
+			return ValueVactory.Value(s)
 		},
 		"func_with_varargs": func(params *exec.VarArgs) exec.Value {
 			// arg := params.args[0]
@@ -165,7 +171,7 @@ Yep!`,
 			kwargs := strings.Join(kwargsAsStr, ", ")
 
 			str := fmt.Sprintf("VarArgs(args=[%s], kwargs={%s})", args, kwargs)
-			return valueVactory.NewValue(str, true)
+			return ValueVactory.SafeValue(str)
 		},
 	},
 	"complex": map[string]any{
@@ -179,7 +185,7 @@ Yep!`,
 			Created: time2,
 		},
 		"comments": []*comment{
-			&comment{
+			{
 				Author: &user{
 					Name:      "user1",
 					Validated: true,
@@ -187,7 +193,7 @@ Yep!`,
 				Date: time1,
 				Text: "\"gonja is nice!\"",
 			},
-			&comment{
+			{
 				Author: &user{
 					Name:      "user2",
 					Validated: true,
@@ -195,7 +201,7 @@ Yep!`,
 				Date: time2,
 				Text: "comment2 with <script>unsafe</script> tags in it",
 			},
-			&comment{
+			{
 				Author: &user{
 					Name:      "user3",
 					Validated: false,
@@ -205,7 +211,7 @@ Yep!`,
 			},
 		},
 		"comments2": []*comment{
-			&comment{
+			{
 				Author: &user{
 					Name:      "user1",
 					Validated: true,
@@ -213,7 +219,7 @@ Yep!`,
 				Date: time2,
 				Text: "\"gonja is nice!\"",
 			},
-			&comment{
+			{
 				Author: &user{
 					Name:      "user1",
 					Validated: true,
@@ -221,7 +227,7 @@ Yep!`,
 				Date: time1,
 				Text: "comment2 with <script>unsafe</script> tags in it",
 			},
-			&comment{
+			{
 				Author: &user{
 					Name:      "user3",
 					Validated: false,

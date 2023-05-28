@@ -2,8 +2,6 @@
 // inspired by testify.
 package testutils
 
-//revive:disable:exported
-
 import (
 	"bytes"
 	"errors"
@@ -15,27 +13,34 @@ type tHelper interface {
 	Helper()
 }
 
+// TestingT is an interface wrapper around *testing.T.
 type TestingT interface {
 	Name() string
-	Errorf(format string, args ...interface{})
+	Errorf(format string, args ...any)
 	Log(...any)
 	FailNow()
 }
 
+// Assertions is a collection of assertion methods that can be used to test
+// conditions in your tests.
 type Assertions struct {
 	t               TestingT
 	failImmediately bool
 }
 
+// NewAssert returns a new Assertions object that will log assertion failures.
 func NewAssert(t TestingT) Assertions {
 	return Assertions{t, false}
 }
 
+// NewRequire returns a new Assertions object that will log assertion failures
+// and stop test execution.
 func NewRequire(t TestingT) Assertions {
 	return Assertions{t, true}
 }
 
-func (a Assertions) Equal(exp interface{}, act interface{}, msgAndArgs ...interface{}) bool {
+// Equal asserts that two objects are equal.
+func (a Assertions) Equal(exp, act any, msgAndArgs ...any) bool {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -47,7 +52,8 @@ func (a Assertions) Equal(exp interface{}, act interface{}, msgAndArgs ...interf
 	return true
 }
 
-func (a Assertions) NotEqual(exp interface{}, act interface{}, msgAndArgs ...interface{}) bool {
+// NotEqual asserts that two objects are not equal.
+func (a Assertions) NotEqual(exp, act any, msgAndArgs ...any) bool {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -59,7 +65,8 @@ func (a Assertions) NotEqual(exp interface{}, act interface{}, msgAndArgs ...int
 	return true
 }
 
-func (a Assertions) Error(err error, msgAndArgs ...interface{}) bool {
+// Error asserts that a function returned an error (i.e. not `nil`).
+func (a Assertions) Error(err error, msgAndArgs ...any) bool {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -70,7 +77,8 @@ func (a Assertions) Error(err error, msgAndArgs ...interface{}) bool {
 	return true
 }
 
-func (a Assertions) NoError(err error, msgAndArgs ...interface{}) bool {
+// NoError asserts that a function returned no error (i.e. `nil`).
+func (a Assertions) NoError(err error, msgAndArgs ...any) bool {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -81,7 +89,9 @@ func (a Assertions) NoError(err error, msgAndArgs ...interface{}) bool {
 	return true
 }
 
-func (a Assertions) EqualError(expErr, actErr error, msgAndArgs ...interface{}) bool {
+// EqualError asserts that a function returned an error (i.e. not `nil`) and
+// that it is equal to the provided error.
+func (a Assertions) EqualError(expErr, actErr error, msgAndArgs ...any) bool {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -94,7 +104,37 @@ func (a Assertions) EqualError(expErr, actErr error, msgAndArgs ...interface{}) 
 	return true
 }
 
-func (a Assertions) False(exp bool, msgAndArgs ...interface{}) bool {
+// Panic asserts that the code inside the specified PanicTestFunc panics.
+func (a Assertions) Panic(f func(), msgAndArgs ...any) bool {
+	if h, ok := a.t.(tHelper); ok {
+		h.Helper()
+	}
+	defer func() {
+		if r := recover(); r == nil {
+			a.log("expected a panic", msgAndArgs...)
+		}
+	}()
+	f()
+	return true
+}
+
+// NotPanic asserts that the code inside the specified PanicTestFunc does not
+// panic.
+func (a Assertions) NotPanic(f func(), msgAndArgs ...any) bool {
+	if h, ok := a.t.(tHelper); ok {
+		h.Helper()
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			a.log(fmt.Sprintf("expected no panic, got: '%v'", r), msgAndArgs...)
+		}
+	}()
+	f()
+	return true
+}
+
+// False asserts that the specified value is false.
+func (a Assertions) False(exp bool, msgAndArgs ...any) bool {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -105,7 +145,8 @@ func (a Assertions) False(exp bool, msgAndArgs ...interface{}) bool {
 	return true
 }
 
-func (a Assertions) True(exp bool, msgAndArgs ...interface{}) bool {
+// True asserts that the specified value is true.
+func (a Assertions) True(exp bool, msgAndArgs ...any) bool {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -116,7 +157,8 @@ func (a Assertions) True(exp bool, msgAndArgs ...interface{}) bool {
 	return true
 }
 
-func (a Assertions) IsType(expType interface{}, obj interface{}, msgAndArgs ...interface{}) bool {
+// IsType asserts that the specified object is of the specified type.
+func (a Assertions) IsType(expType, obj any, msgAndArgs ...any) bool {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -127,7 +169,8 @@ func (a Assertions) IsType(expType interface{}, obj interface{}, msgAndArgs ...i
 	return true
 }
 
-func (a Assertions) Nil(obj interface{}, msgAndArgs ...interface{}) bool {
+// Nil asserts that the specified object is nil.
+func (a Assertions) Nil(obj any, msgAndArgs ...any) bool {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -138,7 +181,8 @@ func (a Assertions) Nil(obj interface{}, msgAndArgs ...interface{}) bool {
 	return true
 }
 
-func (a Assertions) NotNil(obj interface{}, msgAndArgs ...interface{}) bool {
+// NotNil asserts that the specified object is not nil.
+func (a Assertions) NotNil(obj any, msgAndArgs ...any) bool {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -149,7 +193,8 @@ func (a Assertions) NotNil(obj interface{}, msgAndArgs ...interface{}) bool {
 	return true
 }
 
-func (a Assertions) Len(obj interface{}, length int, msgAndArgs ...interface{}) bool {
+// Len asserts that the specified object has specific length.
+func (a Assertions) Len(obj any, length int, msgAndArgs ...any) bool {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -167,7 +212,8 @@ func (a Assertions) Len(obj interface{}, length int, msgAndArgs ...interface{}) 
 	return true
 }
 
-func (a Assertions) log(defaultMsg string, msgAndArgs ...interface{}) {
+// log is a helper function that formats the message and logs it.
+func (a Assertions) log(defaultMsg string, msgAndArgs ...any) {
 	if h, ok := a.t.(tHelper); ok {
 		h.Helper()
 	}
@@ -187,7 +233,9 @@ func (a Assertions) log(defaultMsg string, msgAndArgs ...interface{}) {
 	}
 }
 
-func equal(expected, actual interface{}) bool {
+// equal is a helper function that compares two objects and returns true if they
+// are equal.
+func equal(expected, actual any) bool {
 	if expected == nil || actual == nil {
 		return expected == actual
 	}
