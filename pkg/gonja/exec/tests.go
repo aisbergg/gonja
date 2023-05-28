@@ -49,7 +49,7 @@ func (ts *TestSet) Update(other TestSet) TestSet {
 	return *ts
 }
 
-func (e *Evaluator) EvalTest(expr *parse.TestExpression) Value {
+func (e *Evaluator) evalTest(expr *parse.TestExpression) Value {
 	value := e.Eval(expr.Expression)
 	return e.ExecuteTest(expr.Test, value)
 }
@@ -76,5 +76,5 @@ func (e *Evaluator) ExecuteTestByName(name string, in Value, params *VarArgs) Va
 	}
 	test := (*e.Tests)[name]
 	result := test(e.Ctx, in, params)
-	return e.ValueFactory.NewValue(result, false)
+	return e.ValueFactory.Value(result)
 }

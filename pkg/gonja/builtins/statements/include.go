@@ -19,11 +19,14 @@ type IncludeStmt struct {
 	IsEmpty       bool
 }
 
-var _ parse.Statement = (*IncludeStmt)(nil)
-var _ exec.Statement = (*IncludeStmt)(nil)
+var (
+	_ parse.Statement = (*IncludeStmt)(nil)
+	_ exec.Statement  = (*IncludeStmt)(nil)
+)
 
 // Position returns the token position of the statement.
 func (stmt *IncludeStmt) Position() *parse.Token { return stmt.Location }
+
 func (stmt *IncludeStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("IncludeStmt(Filename=%s Line=%d Col=%d)", stmt.Filename, t.Line, t.Col)
@@ -65,7 +68,7 @@ type IncludeEmptyStmt struct{}
 // 	return nil
 // }
 
-func includeParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func includeParser(p, args *parse.Parser) parse.Statement {
 	stmt := &IncludeStmt{
 		Location: p.Current(),
 	}

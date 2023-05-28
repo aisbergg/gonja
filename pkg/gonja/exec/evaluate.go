@@ -30,11 +30,20 @@ type Evaluator struct {
 	Current      parse.Node
 }
 
+// func (r *Renderer) Evaluator() *Evaluator {
+// 	e := evaluatorPool.Get().(*Evaluator)
+// 	e.EvalConfig = r.EvalConfig
+// 	e.Ctx = r.Ctx
+// 	e.ValueFactory = r.ValueFactory
+// 	return e
+// }
+
 func (r *Renderer) Evaluator() *Evaluator {
-	e := evaluatorPool.Get().(*Evaluator)
-	e.EvalConfig = r.EvalConfig
-	e.Ctx = r.Ctx
-	e.ValueFactory = r.ValueVactory
+	e := &Evaluator{
+		EvalConfig:   r.EvalConfig,
+		Ctx:          r.Ctx,
+		ValueFactory: r.ValueFactory,
+	}
 	return e
 }
 
@@ -46,13 +55,13 @@ func (r *Renderer) Eval(node parse.Expression) Value {
 	debug.Print("eval: %s", node.String())
 
 	e := r.Evaluator()
-	defer func() {
-		e.EvalConfig = nil
-		e.Ctx = nil
-		e.Current = nil
-		e.ValueFactory = nil
-		evaluatorPool.Put(e)
-	}()
+	// defer func() {
+	// 	e.EvalConfig = nil
+	// 	e.Ctx = nil
+	// 	e.Current = nil
+	// 	e.ValueFactory = nil
+	// 	evaluatorPool.Put(e)
+	// }()
 	// enrich runtime errors with token position
 	defer func() {
 		if r := recover(); r != nil {
@@ -78,13 +87,13 @@ func (e *Evaluator) Eval(node parse.Expression) Value {
 	e.Current = node
 	switch n := node.(type) {
 	case *parse.StringNode:
-		return e.ValueFactory.NewValue(n.Val, false)
+		return e.ValueFactory.Value(n.Val)
 	case *parse.IntegerNode:
-		return e.ValueFactory.NewValue(n.Val, false)
+		return e.ValueFactory.Value(n.Val)
 	case *parse.FloatNode:
-		return e.ValueFactory.NewValue(n.Val, false)
+		return e.ValueFactory.Value(n.Val)
 	case *parse.BoolNode:
-		return e.ValueFactory.NewValue(n.Val, false)
+		return e.ValueFactory.Value(n.Val)
 	case *parse.ListNode:
 		return e.evalList(n)
 	case *parse.TupleNode:
@@ -100,21 +109,23 @@ func (e *Evaluator) Eval(node parse.Expression) Value {
 	case *parse.GetItemNode:
 		return e.evalGetItem(n)
 	case *parse.NegationNode:
-		return e.ValueFactory.NewValue(!e.Eval(n.Term).IsTrue(), false)
+		return e.ValueFactory.Value(!e.Eval(n.Term).Bool())
 	case *parse.BinaryExpressionNode:
-		return e.evalBinaryExpression(n)
+		return e.evalBinary(n)
 	case *parse.UnaryExpressionNode:
-		return e.evalUnaryExpression(n)
+		return e.evalUnary(n)
 	case *parse.FilteredExpression:
-		return e.EvaluateFiltered(n)
+		return e.evalFiltered(n)
 	case *parse.TestExpression:
-		return e.EvalTest(n)
+		return e.evalTest(n)
+	case *parse.InlineIfExpressionNode:
+		return e.evalInlineIf(n)
 	}
 
 	panic(fmt.Errorf("[BUG] unknown expression type '%T'", node))
 }
 
-func (e *Evaluator) evalBinaryExpression(node *parse.BinaryExpressionNode) Value {
+func (e *Evaluator) evalBinary(node *parse.BinaryExpressionNode) Value {
 	if debug.Enabled {
 		fm := debug.FuncMarker()
 		defer fm.End()
@@ -149,82 +160,82 @@ func (e *Evaluator) evalBinaryExpression(node *parse.BinaryExpressionNode) Value
 			for ix := 0; ix < rightList.Len(); ix++ {
 				newList = reflect.Append(newList, rightList.Index(ix))
 			}
-			return e.ValueFactory.NewValue(newList.Interface(), false)
+			return e.ValueFactory.Value(newList.Interface())
 		}
 		if left.IsFloat() || right.IsFloat() {
 			// Result will be a float
-			return e.ValueFactory.NewValue(left.Float()+right.Float(), false)
+			return e.ValueFactory.Value(left.Float() + right.Float())
 		}
 		// Result will be an integer
-		return e.ValueFactory.NewValue(left.Integer()+right.Integer(), false)
+		return e.ValueFactory.Value(left.Integer() + right.Integer())
 	case parse.OperatorSub:
 		if left.IsFloat() || right.IsFloat() {
 			// Result will be a float
-			return e.ValueFactory.NewValue(left.Float()-right.Float(), false)
+			return e.ValueFactory.Value(left.Float() - right.Float())
 		}
 		// Result will be an integer
-		return e.ValueFactory.NewValue(left.Integer()-right.Integer(), false)
+		return e.ValueFactory.Value(left.Integer() - right.Integer())
 	case parse.OperatorMul:
 		if left.IsFloat() || right.IsFloat() {
 			// Result will be float
-			return e.ValueFactory.NewValue(left.Float()*right.Float(), false)
+			return e.ValueFactory.Value(left.Float() * right.Float())
 		}
 		if left.IsString() {
-			return e.ValueFactory.NewValue(strings.Repeat(left.String(), right.Integer()), false)
+			return e.ValueFactory.Value(strings.Repeat(left.String(), right.Integer()))
 		}
 		// Result will be int
-		return e.ValueFactory.NewValue(left.Integer()*right.Integer(), false)
+		return e.ValueFactory.Value(left.Integer() * right.Integer())
 	case parse.OperatorDiv:
 		// Float division
-		return e.ValueFactory.NewValue(left.Float()/right.Float(), false)
+		return e.ValueFactory.Value(left.Float() / right.Float())
 	case parse.OperatorFloordiv:
 		// Int division
-		return e.ValueFactory.NewValue(int(left.Float()/right.Float()), false)
+		return e.ValueFactory.Value(int(left.Float() / right.Float()))
 	case parse.OperatorMod:
 		// Result will be int
-		return e.ValueFactory.NewValue(left.Integer()%right.Integer(), false)
+		return e.ValueFactory.Value(left.Integer() % right.Integer())
 	case parse.OperatorPower:
-		return e.ValueFactory.NewValue(math.Pow(left.Float(), right.Float()), false)
+		return e.ValueFactory.Value(math.Pow(left.Float(), right.Float()))
 	case parse.OperatorConcat:
-		return e.ValueFactory.NewValue(strings.Join([]string{left.String(), right.String()}, ""), false)
+		return e.ValueFactory.Value(strings.Join([]string{left.String(), right.String()}, ""))
 	case parse.OperatorAnd:
-		if !left.IsTrue() {
-			return e.ValueFactory.NewValue(false, false)
+		if !left.Bool() {
+			return e.ValueFactory.Value(false)
 		}
 		right = e.Eval(node.Right)
-		return e.ValueFactory.NewValue(right.IsTrue(), false)
+		return e.ValueFactory.Value(right.Bool())
 	case parse.OperatorOr:
-		if left.IsTrue() {
-			return e.ValueFactory.NewValue(true, false)
+		if left.Bool() {
+			return e.ValueFactory.Value(true)
 		}
 		right = e.Eval(node.Right)
-		return e.ValueFactory.NewValue(right.IsTrue(), false)
+		return e.ValueFactory.Value(right.Bool())
 	case parse.OperatorLteq:
 		if left.IsFloat() || right.IsFloat() {
-			return e.ValueFactory.NewValue(left.Float() <= right.Float(), false)
+			return e.ValueFactory.Value(left.Float() <= right.Float())
 		}
-		return e.ValueFactory.NewValue(left.Integer() <= right.Integer(), false)
+		return e.ValueFactory.Value(left.Integer() <= right.Integer())
 	case parse.OperatorGteq:
 		if left.IsFloat() || right.IsFloat() {
-			return e.ValueFactory.NewValue(left.Float() >= right.Float(), false)
+			return e.ValueFactory.Value(left.Float() >= right.Float())
 		}
-		return e.ValueFactory.NewValue(left.Integer() >= right.Integer(), false)
+		return e.ValueFactory.Value(left.Integer() >= right.Integer())
 	case parse.OperatorEq:
-		return e.ValueFactory.NewValue(left.EqualValueTo(right), false)
+		return e.ValueFactory.Value(left.EqualValueTo(right))
 	case parse.OperatorGt:
 		if left.IsFloat() || right.IsFloat() {
-			return e.ValueFactory.NewValue(left.Float() > right.Float(), false)
+			return e.ValueFactory.Value(left.Float() > right.Float())
 		}
-		return e.ValueFactory.NewValue(left.Integer() > right.Integer(), false)
+		return e.ValueFactory.Value(left.Integer() > right.Integer())
 	case parse.OperatorLt:
 		if left.IsFloat() || right.IsFloat() {
-			return e.ValueFactory.NewValue(left.Float() < right.Float(), false)
+			return e.ValueFactory.Value(left.Float() < right.Float())
 		}
-		return e.ValueFactory.NewValue(left.Integer() < right.Integer(), false)
+		return e.ValueFactory.Value(left.Integer() < right.Integer())
 	case parse.OperatorNe:
-		return e.ValueFactory.NewValue(!left.EqualValueTo(right), false)
+		return e.ValueFactory.Value(!left.EqualValueTo(right))
 	case parse.OperatorIn:
-		return e.ValueFactory.NewValue(right.Contains(left), false)
+		return e.ValueFactory.Value(right.Contains(left))
 	case parse.OperatorIs:
 		return nil
 	}
@@ -232,7 +243,7 @@ func (e *Evaluator) evalBinaryExpression(node *parse.BinaryExpressionNode) Value
 	panic(fmt.Errorf("[BUG] unknown operator '%s'", node.Operator.Token))
 }
 
-func (e *Evaluator) evalUnaryExpression(expr *parse.UnaryExpressionNode) Value {
+func (e *Evaluator) evalUnary(expr *parse.UnaryExpressionNode) Value {
 	if debug.Enabled {
 		fm := debug.FuncMarker()
 		defer fm.End()
@@ -244,9 +255,9 @@ func (e *Evaluator) evalUnaryExpression(expr *parse.UnaryExpressionNode) Value {
 		if result.IsNumber() {
 			switch {
 			case result.IsFloat():
-				return e.ValueFactory.NewValue(-1*result.Float(), false)
+				return e.ValueFactory.Value(-1 * result.Float())
 			case result.IsInteger():
-				return e.ValueFactory.NewValue(-1*result.Integer(), false)
+				return e.ValueFactory.Value(-1 * result.Integer())
 			default:
 				errors.ThrowTemplateRuntimeError("Operation between a number and a non-(float/integer) is not possible")
 			}
@@ -270,7 +281,7 @@ func (e *Evaluator) evalList(node *parse.ListNode) Value {
 		values = append(values, value)
 	}
 	e.Current = node
-	return e.ValueFactory.NewValue(values, false)
+	return e.ValueFactory.Value(values)
 }
 
 func (e *Evaluator) evalTuple(node *parse.TupleNode) Value {
@@ -286,7 +297,7 @@ func (e *Evaluator) evalTuple(node *parse.TupleNode) Value {
 		values = append(values, value)
 	}
 	e.Current = node
-	return e.ValueFactory.NewValue(values, false)
+	return e.ValueFactory.Value(values)
 }
 
 func (e *Evaluator) evalDict(node *parse.DictNode) Value {
@@ -302,7 +313,7 @@ func (e *Evaluator) evalDict(node *parse.DictNode) Value {
 		pairs = append(pairs, p.Interface().(*Pair))
 	}
 	e.Current = node
-	return e.ValueFactory.NewValue(&Dict{pairs}, false)
+	return e.ValueFactory.Value(&Dict{pairs})
 }
 
 func (e *Evaluator) evalPair(node *parse.PairNode) Value {
@@ -316,7 +327,7 @@ func (e *Evaluator) evalPair(node *parse.PairNode) Value {
 	e.Current = node
 	value := e.Eval(node.Value)
 	e.Current = node
-	return e.ValueFactory.NewValue(&Pair{key, value}, false)
+	return e.ValueFactory.Value(&Pair{key, value})
 }
 
 func (e *Evaluator) evalName(node *parse.NameNode) Value {
@@ -426,7 +437,7 @@ func (e *Evaluator) evalCall(node *parse.CallNode) Value {
 	if rv.Type() == rtValue {
 		return rv.Interface().(Value)
 	}
-	return e.ValueFactory.NewValue(rv.Interface(), false)
+	return e.ValueFactory.Value(rv.Interface())
 }
 
 func (e *Evaluator) evalVarArgs(node *parse.CallNode) []reflect.Value {
@@ -504,7 +515,27 @@ func (e *Evaluator) evalParams(node *parse.CallNode, fn Value) []reflect.Value {
 		}
 
 		// wants something else
-		paramType := param.ReflectValue().Type()
+		paramRV := param.ReflectValue()
+		paramType := paramRV.Type()
+
+		if wantType != paramType {
+			// try to convert the parameter to the wanted type
+			for {
+				if paramType.ConvertibleTo(wantType) {
+					paramRV = paramRV.Convert(wantType)
+					paramType = paramRV.Type()
+					break
+				}
+				if paramType.Kind() == reflect.Interface || paramType.Kind() == reflect.Ptr {
+					// try to unwrap
+					paramRV = paramRV.Elem()
+					paramType = paramRV.Type()
+					continue
+				}
+				break
+			}
+		}
+
 		if wantType != paramType {
 			errors.ThrowTemplateRuntimeError(
 				"parameter %d of function %s must be of type %s, got %s",
@@ -514,7 +545,7 @@ func (e *Evaluator) evalParams(node *parse.CallNode, fn Value) []reflect.Value {
 				paramType.String(),
 			)
 		}
-		parameters = append(parameters, param.ReflectValue())
+		parameters = append(parameters, paramRV)
 	}
 
 	// check if any of the values are invalid
@@ -529,4 +560,13 @@ func (e *Evaluator) evalParams(node *parse.CallNode, fn Value) []reflect.Value {
 	}
 
 	return parameters
+}
+
+// evalInlineIf evaluates an inline if expression.
+func (e *Evaluator) evalInlineIf(expr *parse.InlineIfExpressionNode) Value {
+	condition := e.Eval(expr.Condition)
+	if condition.Bool() {
+		return e.Eval(expr.TrueExpr)
+	}
+	return e.Eval(expr.FalseExpr)
 }

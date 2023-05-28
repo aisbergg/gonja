@@ -12,8 +12,10 @@ type MacroStmt struct {
 	*parse.MacroNode
 }
 
-var _ parse.Statement = (*MacroStmt)(nil)
-var _ exec.Statement = (*MacroStmt)(nil)
+var (
+	_ parse.Statement = (*MacroStmt)(nil)
+	_ exec.Statement  = (*MacroStmt)(nil)
+)
 
 // func (stmt *MacroStmt) Position() *tokens.Token { return stmt.Location }
 func (stmt *MacroStmt) String() string {
@@ -75,7 +77,7 @@ func (stmt *MacroStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) 
 // 	return nil
 // }
 
-func macroParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func macroParser(p, args *parse.Parser) parse.Statement {
 	stmt := &parse.MacroNode{
 		Location: p.Current(),
 		Args:     []string{},

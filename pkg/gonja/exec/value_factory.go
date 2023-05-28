@@ -28,8 +28,19 @@ func NewValueFactory(undefined UndefinedFunc, customTypes map[reflect.Type]Value
 	}
 }
 
-// NewValue creates a new value from the given interface.
-func (vf *ValueFactory) NewValue(value interface{}, isSafe bool) Value {
+// Value creates a new [Value] container from the given value.
+func (vf *ValueFactory) Value(value any) Value {
+	return vf.asValue(value, false)
+}
+
+// SafeValue creates a new [Value] container from the given value and marks
+// it as safe.
+func (vf *ValueFactory) SafeValue(value any) Value {
+	return vf.asValue(value, true)
+}
+
+// asValue converts the given value to a [Value] container.
+func (vf *ValueFactory) asValue(value any, isSafe bool) Value {
 	if value == nil {
 		return NewNilValue()
 	}
@@ -76,25 +87,6 @@ func (vf *ValueFactory) NewValue(value interface{}, isSafe bool) Value {
 }
 
 // NewUndefined creates a new undefined value.
-func (vf *ValueFactory) NewUndefined(name string, hintFormat string, args ...any) Undefined {
+func (vf *ValueFactory) NewUndefined(name, hintFormat string, args ...any) Undefined {
 	return vf.undefinedFn(name, hintFormat, args...)
 }
-
-// func (vf *ValueFactory) Slice(i, j int) Value {}
-// func (vf *ValueFactory) Index(i int) Value    {}
-// func (vf *ValueFactory) IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
-// }
-// func (vf *ValueFactory) Interface() any                                    {}
-// func (vf *ValueFactory) GetItem(key any, valueFactory *ValueFactory) Value {}
-
-// ToValueFunc converts a reflect.Value to a Value container.
-// type ToValueFunc func(val interface{}, safe bool) Value
-
-// // getWithCustom uses the provided custom converters to copy the value.
-// func (r *ValueFactory) getWithCustom(val reflect.Value, typ reflect.Type, key any) (ret reflect.Value, ok, usedGetter bool) {
-// 	if getter, ok := r.customGetters[typ]; ok {
-// 		ret, ok = getter(val, key)
-// 		return ret, ok, true
-// 	}
-// 	return
-// }

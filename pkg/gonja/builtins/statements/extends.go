@@ -21,7 +21,7 @@ func (stmt *ExtendsStmt) String() string {
 	return fmt.Sprintf("ExtendsStmt(Filename=%s Line=%d Col=%d)", stmt.Filename, t.Line, t.Col)
 }
 
-func extendsParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func extendsParser(p, args *parse.Parser) parse.Statement {
 	stmt := &ExtendsStmt{
 		Location: p.Current(),
 	}

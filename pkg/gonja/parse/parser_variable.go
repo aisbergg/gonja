@@ -281,7 +281,6 @@ func (p *Parser) ParseVariable() Expression {
 				i, err := strconv.Atoi(tok.Val)
 				if err != nil {
 					errors.ThrowSyntaxError(p.Current().ErrorToken(), err.Error())
-
 				}
 				getitem.Index = i
 			default:

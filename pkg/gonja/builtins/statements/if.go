@@ -15,8 +15,10 @@ type IfStmt struct {
 	wrappers   []*parse.WrapperNode
 }
 
-var _ parse.Statement = (*IfStmt)(nil)
-var _ exec.Statement = (*IfStmt)(nil)
+var (
+	_ parse.Statement = (*IfStmt)(nil)
+	_ exec.Statement  = (*IfStmt)(nil)
+)
 
 func (stmt *IfStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *IfStmt) String() string {
@@ -29,7 +31,7 @@ func (stmt *IfStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 	for i, condition := range stmt.conditions {
 		result := r.Eval(condition)
 
-		if result.IsTrue() {
+		if result.Bool() {
 			if err := r.ExecuteWrapper(stmt.wrappers[i]); err != nil {
 				panic(err)
 			}
@@ -45,7 +47,7 @@ func (stmt *IfStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 	}
 }
 
-func ifParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func ifParser(p, args *parse.Parser) parse.Statement {
 	if debug.Enabled {
 		fm := debug.FuncMarker()
 		defer fm.End()

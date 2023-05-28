@@ -35,7 +35,7 @@ type Template struct {
 }
 
 // NewTemplate creates a new template.
-func NewTemplate(name string, source string, cfg *EvalConfig) (*Template, error) {
+func NewTemplate(name, source string, cfg *EvalConfig) (*Template, error) {
 	// Create the template
 	t := &Template{
 		Env:    cfg,
@@ -45,6 +45,13 @@ func NewTemplate(name string, source string, cfg *EvalConfig) (*Template, error)
 
 	// Parse it
 	t.Parser = parse.NewParser(cfg.Config, t.Tokens)
+	// // print tokens
+	// for !t.Parser.Stream.End() {
+	// 	t := t.Parser.Stream.Next()
+	// 	println(t.String())
+	// }
+	// os.Exit(0)
+
 	t.Parser.Statements = *t.Env.Statements
 	t.Parser.TemplateParseFn = cfg.templateParseFn
 	root, err := t.Parser.Parse()
@@ -109,4 +116,9 @@ func (tpl *Template) Execute(ctx any) (string, error) {
 	}
 
 	return b.String(), nil
+}
+
+// Render is a alias for Execute.
+func (tpl *Template) Render(ctx any) (string, error) {
+	return tpl.Execute(ctx)
 }

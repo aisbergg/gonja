@@ -13,8 +13,10 @@ type AutoescapeStmt struct {
 	Autoescape bool
 }
 
-var _ parse.Statement = (*AutoescapeStmt)(nil)
-var _ exec.Statement = (*AutoescapeStmt)(nil)
+var (
+	_ parse.Statement = (*AutoescapeStmt)(nil)
+	_ exec.Statement  = (*AutoescapeStmt)(nil)
+)
 
 func (stmt *AutoescapeStmt) Position() *parse.Token { return stmt.Wrapper.Position() }
 func (stmt *AutoescapeStmt) String() string {
@@ -34,7 +36,7 @@ func (stmt *AutoescapeStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockN
 	}
 }
 
-func autoescapeParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func autoescapeParser(p, args *parse.Parser) parse.Statement {
 	stmt := &AutoescapeStmt{}
 
 	wrapper, _ := p.WrapUntil("endautoescape")

@@ -12,8 +12,10 @@ type RawStmt struct {
 	Data *parse.DataNode
 }
 
-var _ parse.Statement = (*RawStmt)(nil)
-var _ exec.Statement = (*RawStmt)(nil)
+var (
+	_ parse.Statement = (*RawStmt)(nil)
+	_ exec.Statement  = (*RawStmt)(nil)
+)
 
 func (stmt *RawStmt) Position() *parse.Token { return stmt.Data.Position() }
 func (stmt *RawStmt) String() string {
@@ -26,7 +28,7 @@ func (stmt *RawStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 	r.WriteString(stmt.Data.Data.Val)
 }
 
-func rawParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func rawParser(p, args *parse.Parser) parse.Statement {
 	stmt := &RawStmt{}
 
 	wrapper, _ := p.WrapUntil("endraw")

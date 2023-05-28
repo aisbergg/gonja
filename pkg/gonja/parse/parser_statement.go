@@ -5,7 +5,7 @@ import (
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
 )
 
-type StatementParser func(parser *Parser, args *Parser) Statement
+type StatementParser func(parser, args *Parser) Statement
 
 // Tag = "{%" IDENT ARGS "%}"
 func (p *Parser) ParseStatement() Statement {
@@ -16,12 +16,12 @@ func (p *Parser) ParseStatement() Statement {
 	debug.Print("parse: %s", p.Current())
 
 	if p.Match(TokenBlockBegin) == nil {
-		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s' , expected '{%%'", p.Current())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "unexpected '%s' , expected '{%%'", p.Current().Val)
 	}
 
 	name := p.Match(TokenName)
 	if name == nil {
-		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected statement name, got '%s'", p.Current())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected statement name, got '%s'", p.Current().Val)
 	}
 
 	// Check for the existing statement
@@ -37,7 +37,7 @@ func (p *Parser) ParseStatement() Statement {
 	// }
 
 	var args []*Token
-	for p.Peek(TokenBlockEnd) == nil && !p.Stream.End() {
+	for !p.Stream.End() && p.Peek(TokenBlockEnd) == nil {
 		// Add token to args
 		args = append(args, p.Next())
 		// p.Consume() // next token
@@ -80,7 +80,7 @@ func (p *Parser) ParseStatementBlock() *StatementBlockNode {
 
 	name := p.Match(TokenName)
 	if name == nil {
-		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected statement name, got '%s'", p.Current())
+		errors.ThrowSyntaxError(p.Current().ErrorToken(), "expected statement name, got '%s'", p.Current().Val)
 	}
 
 	// Check for the existing statement
@@ -97,10 +97,8 @@ func (p *Parser) ParseStatementBlock() *StatementBlockNode {
 
 	debug.Print("find args token")
 	var args []*Token
-	for p.Peek(TokenBlockEnd) == nil && !p.Stream.End() {
-		// Add token to args
+	for !p.Stream.End() && p.Peek(TokenBlockEnd) == nil {
 		args = append(args, p.Next())
-		// p.Consume() // next token
 	}
 
 	// EOF?

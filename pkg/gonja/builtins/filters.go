@@ -3,6 +3,7 @@ package builtins
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"math"
 	"math/rand"
 	"net/url"
@@ -28,6 +29,8 @@ var Filters = exec.FilterSet{
 	"abs":            filterAbs,
 	"attr":           filterAttr,
 	"batch":          filterBatch,
+	"bool":           filterBoolean,
+	"boolean":        filterBoolean,
 	"capitalize":     filterCapitalize,
 	"center":         filterCenter,
 	"d":              filterDefault,
@@ -43,6 +46,7 @@ var Filters = exec.FilterSet{
 	"groupby":        filterGroupBy,
 	"indent":         filterIndent,
 	"int":            filterInteger,
+	"integer":        filterInteger,
 	"join":           filterJoin,
 	"last":           filterLast,
 	"length":         filterLength,
@@ -92,13 +96,13 @@ func filterAbs(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Valu
 	if in.IsInteger() {
 		asInt := in.Integer()
 		if asInt < 0 {
-			return e.ValueFactory.NewValue(-asInt, false)
+			return e.ValueFactory.Value(-asInt)
 		}
 		return in
 	} else if in.IsFloat() {
-		return e.ValueFactory.NewValue(math.Abs(in.Float()), false)
+		return e.ValueFactory.Value(math.Abs(in.Float()))
 	}
-	return e.ValueFactory.NewValue(math.Abs(in.Float()), false) // nothing to do here, just to keep track of the safe application
+	return e.ValueFactory.Value(math.Abs(in.Float())) // nothing to do here, just to keep track of the safe application
 }
 
 func filterAttr(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -136,7 +140,7 @@ func filterBatch(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Va
 	in.Iterate(func(idx, count int, key, value exec.Value) bool {
 		if math.Mod(float64(idx), float64(size)) == 0 {
 			if row != nil {
-				out = append(out, e.ValueFactory.NewValue(row, false))
+				out = append(out, e.ValueFactory.Value(row))
 			}
 			row = []exec.Value{}
 		}
@@ -150,9 +154,22 @@ func filterBatch(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Va
 				row = append(row, fillWith)
 			}
 		}
-		out = append(out, e.ValueFactory.NewValue(row, false))
+		out = append(out, e.ValueFactory.Value(row))
 	}
-	return e.ValueFactory.NewValue(out, false)
+	return e.ValueFactory.Value(out)
+}
+
+func filterBoolean(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
+	if debug.Enabled {
+		fm := debug.FuncMarker()
+		defer fm.End()
+	}
+	debug.Print("call filter with raw args: bool(%s)", params.String())
+	if p := params.ExpectNothing(); p.IsError() {
+		errors.ThrowFilterArgumentError("bool()", p.Error())
+	}
+
+	return e.ValueFactory.Value(in.Bool())
 }
 
 func filterCapitalize(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -165,12 +182,15 @@ func filterCapitalize(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) ex
 		errors.ThrowFilterArgumentError("capitalize()", p.Error())
 	}
 
-	if in.Len() <= 0 {
-		return e.ValueFactory.NewValue("", false)
+	if in.IsNil() {
+		return e.ValueFactory.Value("")
 	}
 	t := in.String()
+	if len(t) == 0 {
+		return e.ValueFactory.Value("")
+	}
 	r, size := utf8.DecodeRuneInString(t)
-	return e.ValueFactory.NewValue(strings.ToUpper(string(r))+strings.ToLower(t[size:]), false)
+	return e.ValueFactory.Value(strings.ToUpper(string(r)) + strings.ToLower(t[size:]))
 }
 
 func filterCenter(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -195,10 +215,7 @@ func filterCenter(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 	left := spaces/2 + spaces%2
 	right := spaces / 2
 
-	return e.ValueFactory.NewValue(
-		fmt.Sprintf("%s%s%s", strings.Repeat(" ", left), in.String(), strings.Repeat(" ", right)),
-		false,
-	)
+	return e.ValueFactory.Value(fmt.Sprintf("%s%s%s", strings.Repeat(" ", left), in.String(), strings.Repeat(" ", right)))
 }
 
 func filterDefault(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -213,16 +230,17 @@ func filterDefault(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.
 	}
 	debug.Print("call filter with evaluated args: default(%s)", p.String())
 
-	falsy := p.GetKwarg("boolean")
-	if falsy.Bool() && !in.IsTrue() {
+	if !exec.IsDefined(in) {
 		return p.GetKwarg("default_value")
-	} else if in.IsNil() {
+	}
+	falsy := p.GetKwarg("boolean")
+	if falsy.Bool() && !in.Bool() {
 		return p.GetKwarg("default_value")
 	}
 	return in
 }
 
-func sortByKey(in exec.Value, caseSensitive bool, reverse bool) [][2]exec.Value {
+func sortByKey(in exec.Value, caseSensitive, reverse bool) [][2]exec.Value {
 	out := [][2]exec.Value{}
 	in.IterateOrder(func(idx, count int, key, value exec.Value) bool {
 		out = append(out, [2]exec.Value{key, value})
@@ -282,9 +300,9 @@ func filterDictSort(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec
 
 	switch by {
 	case "key":
-		return e.ValueFactory.NewValue(sortByKey(in, caseSensitive, reverse), false)
+		return e.ValueFactory.Value(sortByKey(in, caseSensitive, reverse))
 	case "value":
-		return e.ValueFactory.NewValue(sortByValue(in, caseSensitive, reverse), false)
+		return e.ValueFactory.Value(sortByValue(in, caseSensitive, reverse))
 	}
 	errors.ThrowFilterArgumentError("dictsort(case_sensitive=false, by='key', reverse=false)", "'by' should be either 'key' or 'value'")
 	return nil
@@ -303,7 +321,7 @@ func filterEscape(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 	if in.IsSafe() {
 		return in
 	}
-	return e.ValueFactory.NewValue(in.Escaped(), true)
+	return e.ValueFactory.SafeValue(in.Escaped())
 }
 
 var (
@@ -335,9 +353,9 @@ func filterFileSize(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec
 		prefixes = bytesPrefixes
 	}
 	if bytes == 1.0 {
-		return e.ValueFactory.NewValue("1 Byte", false)
+		return e.ValueFactory.Value("1 Byte")
 	} else if bytes < base {
-		return e.ValueFactory.NewValue(fmt.Sprintf("%.0f Bytes", bytes), false)
+		return e.ValueFactory.Value(fmt.Sprintf("%.0f Bytes", bytes))
 	} else {
 		var i int
 		var unit float64
@@ -345,10 +363,10 @@ func filterFileSize(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec
 		for i, prefix = range prefixes {
 			unit = math.Pow(base, float64(i+2))
 			if bytes < unit {
-				return e.ValueFactory.NewValue(fmt.Sprintf("%.1f %s", (base*bytes/unit), prefix), false)
+				return e.ValueFactory.Value(fmt.Sprintf("%.1f %s", (base * bytes / unit), prefix))
 			}
 		}
-		return e.ValueFactory.NewValue(fmt.Sprintf("%.1f %s", (base*bytes/unit), prefix), false)
+		return e.ValueFactory.Value(fmt.Sprintf("%.1f %s", (base * bytes / unit), prefix))
 	}
 }
 
@@ -365,7 +383,7 @@ func filterFirst(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Va
 	if in.IsSliceable() && in.Len() > 0 {
 		return in.Index(0)
 	}
-	return e.ValueFactory.NewValue("", false)
+	return e.ValueFactory.Value("")
 }
 
 func filterFloat(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -378,7 +396,7 @@ func filterFloat(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Va
 		errors.ThrowFilterArgumentError("float()", p.Error())
 	}
 
-	return e.ValueFactory.NewValue(in.Float(), false)
+	return e.ValueFactory.Value(in.Float())
 }
 
 func filterForceEscape(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -391,7 +409,7 @@ func filterForceEscape(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) e
 		errors.ThrowFilterArgumentError("forceescape()", p.Error())
 	}
 
-	return e.ValueFactory.NewValue(in.Escaped(), true)
+	return e.ValueFactory.SafeValue(in.Escaped())
 }
 
 func filterFormat(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -405,7 +423,7 @@ func filterFormat(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 	for _, arg := range params.Args {
 		args = append(args, arg.Interface())
 	}
-	return e.ValueFactory.NewValue(fmt.Sprintf(in.String(), args...), false)
+	return e.ValueFactory.Value(fmt.Sprintf(in.String(), args...))
 }
 
 // XXX: 'default' and 'case_sensitive' need to be implemented
@@ -443,11 +461,11 @@ func filterGroupBy(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.
 	out := []map[string]exec.Value{}
 	for _, grouper := range groupers {
 		out = append(out, map[string]exec.Value{
-			"grouper": e.ValueFactory.NewValue(grouper, false),
-			"list":    e.ValueFactory.NewValue(groups[grouper], false),
+			"grouper": e.ValueFactory.Value(grouper),
+			"list":    e.ValueFactory.Value(groups[grouper]),
 		})
 	}
-	return e.ValueFactory.NewValue(out, false)
+	return e.ValueFactory.Value(out)
 }
 
 func filterIndent(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -485,7 +503,7 @@ func filterIndent(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 		out.WriteString(line)
 		out.WriteByte('\n')
 	}
-	return e.ValueFactory.NewValue(out.String(), false)
+	return e.ValueFactory.Value(out.String())
 }
 
 func filterInteger(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -498,7 +516,7 @@ func filterInteger(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.
 		errors.ThrowFilterArgumentError("int()", p.Error())
 	}
 
-	return e.ValueFactory.NewValue(in.Integer(), false)
+	return e.ValueFactory.Value(in.Integer())
 }
 
 func filterJoin(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -520,11 +538,12 @@ func filterJoin(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Val
 		return in
 	}
 	sep := p.GetKwarg("d").String()
-	sl := make([]string, 0, in.Len())
-	for i := 0; i < in.Len(); i++ {
+	l := in.Len()
+	sl := make([]string, 0, l)
+	for i := 0; i < l; i++ {
 		sl = append(sl, in.Index(i).String())
 	}
-	return e.ValueFactory.NewValue(strings.Join(sl, sep), false)
+	return e.ValueFactory.Value(strings.Join(sl, sep))
 }
 
 func filterLast(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -537,10 +556,10 @@ func filterLast(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Val
 		errors.ThrowFilterArgumentError("last()", p.Error())
 	}
 
-	if in.IsSliceable() && in.Len() > 0 {
-		return in.Index(in.Len() - 1)
+	if in.IsSliceable() {
+		return in.Index(-1)
 	}
-	return e.ValueFactory.NewValue("", false)
+	return e.ValueFactory.Value("")
 }
 
 func filterLength(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -553,7 +572,7 @@ func filterLength(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 		errors.ThrowFilterArgumentError("length()", p.Error())
 	}
 
-	return e.ValueFactory.NewValue(in.Len(), false)
+	return e.ValueFactory.Value(in.Len())
 }
 
 func filterList(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -571,14 +590,14 @@ func filterList(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Val
 		for _, r := range in.String() {
 			out = append(out, string(r))
 		}
-		return e.ValueFactory.NewValue(out, false)
+		return e.ValueFactory.Value(out)
 	}
 	out := []exec.Value{}
 	in.Iterate(func(idx, count int, key, value exec.Value) bool {
 		out = append(out, key)
 		return true
 	}, func() {})
-	return e.ValueFactory.NewValue(out, false)
+	return e.ValueFactory.Value(out)
 }
 
 func filterLower(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -591,7 +610,7 @@ func filterLower(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Va
 		errors.ThrowFilterArgumentError("lower()", p.Error())
 	}
 
-	return e.ValueFactory.NewValue(strings.ToLower(in.String()), false)
+	return e.ValueFactory.Value(strings.ToLower(in.String()))
 }
 
 func filterMap(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -611,7 +630,11 @@ func filterMap(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Valu
 	debug.Print("call filter with evaluated args: map(%s)", p.String())
 
 	filter := p.GetKwarg("filter").String()
-	attribute := p.GetKwarg("attribute").String()
+	attrParam := p.GetKwarg("attribute")
+	attribute := ""
+	if !attrParam.IsNil() {
+		attribute = attrParam.String()
+	}
 	defaultVal := p.GetKwarg("default")
 	out := []exec.Value{}
 	in.Iterate(func(idx, count int, key, value exec.Value) bool {
@@ -632,7 +655,7 @@ func filterMap(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Valu
 		out = append(out, val)
 		return true
 	}, func() {})
-	return e.ValueFactory.NewValue(out, false)
+	return e.ValueFactory.Value(out)
 }
 
 func filterMax(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -651,12 +674,16 @@ func filterMax(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Valu
 	debug.Print("call filter with evaluated args: max(%s)", p.String())
 
 	caseSensitive := p.GetKwarg("case_sensitive").Bool()
-	attribute := p.GetKwarg("attribute").String()
+	attrParam := p.GetKwarg("attribute")
+	attribute := ""
+	if !attrParam.IsNil() {
+		attribute = attrParam.String()
+	}
 
 	var max exec.Value
 	in.Iterate(func(idx, count int, key, value exec.Value) bool {
 		val := key
-		if len(attribute) > 0 {
+		if attribute != "" {
 			attr := val.GetItem(attribute)
 			if exec.IsDefined(attr) {
 				val = attr
@@ -690,7 +717,7 @@ func filterMax(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Valu
 	}, func() {})
 
 	if max == nil {
-		return e.ValueFactory.NewValue("", false)
+		return e.ValueFactory.Value("")
 	}
 	return max
 }
@@ -711,7 +738,11 @@ func filterMin(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Valu
 	debug.Print("call filter with evaluated args: min(%s)", p.String())
 
 	caseSensitive := p.GetKwarg("case_sensitive").Bool()
-	attribute := p.GetKwarg("attribute").String()
+	attrParam := p.GetKwarg("attribute")
+	attribute := ""
+	if !attrParam.IsNil() {
+		attribute = attrParam.String()
+	}
 
 	var min exec.Value
 	in.Iterate(func(idx, count int, key, value exec.Value) bool {
@@ -749,7 +780,7 @@ func filterMin(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Valu
 	}, func() {})
 
 	if min == nil {
-		return e.ValueFactory.NewValue("", false)
+		return e.ValueFactory.Value("")
 	}
 	return min
 }
@@ -770,7 +801,7 @@ func filterPPrint(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 	if err != nil {
 		errors.ThrowFilterArgumentError("pprint()", "unable to pretty print '%s'", in.String())
 	}
-	return e.ValueFactory.NewValue(string(b), true)
+	return e.ValueFactory.SafeValue(string(b))
 }
 
 func filterRandom(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -801,7 +832,7 @@ func filterReject(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 	if len(params.Args) == 0 {
 		// Reject truthy value
 		test = func(in exec.Value) bool {
-			return in.IsTrue()
+			return in.Bool()
 		}
 	} else {
 		name := params.First().String()
@@ -811,7 +842,7 @@ func filterReject(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 		}
 		test = func(in exec.Value) bool {
 			out := e.ExecuteTestByName(name, in, testParams)
-			return out.IsTrue()
+			return out.Bool()
 		}
 	}
 
@@ -824,7 +855,7 @@ func filterReject(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 		return true
 	}, func() {})
 
-	return e.ValueFactory.NewValue(out, false)
+	return e.ValueFactory.Value(out)
 }
 
 func filterRejectAttr(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -861,13 +892,13 @@ func filterRejectAttr(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) ex
 
 	in.Iterate(func(idx, count int, key, value exec.Value) bool {
 		result := test(key)
-		if !result.IsTrue() {
+		if !result.Bool() {
 			out = append(out, key)
 		}
 		return true
 	}, func() {})
 
-	return e.ValueFactory.NewValue(out, false)
+	return e.ValueFactory.Value(out)
 }
 
 func filterReplace(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -886,9 +917,9 @@ func filterReplace(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.
 	new := p.Args[1].String()
 	count := p.GetKwarg("count")
 	if count.IsNil() {
-		return e.ValueFactory.NewValue(strings.ReplaceAll(in.String(), old, new), false)
+		return e.ValueFactory.Value(strings.ReplaceAll(in.String(), old, new))
 	}
-	return e.ValueFactory.NewValue(strings.Replace(in.String(), old, new, count.Integer()), false)
+	return e.ValueFactory.Value(strings.Replace(in.String(), old, new, count.Integer()))
 }
 
 func filterReverse(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -907,14 +938,14 @@ func filterReverse(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.
 			out.WriteString(key.String())
 			return true
 		}, func() {}, true, false, false)
-		return e.ValueFactory.NewValue(out.String(), false)
+		return e.ValueFactory.Value(out.String())
 	}
-	out := []exec.Value{}
+	out := exec.ValuesList{}
 	in.IterateOrder(func(idx, count int, key, value exec.Value) bool {
 		out = append(out, key)
 		return true
-	}, func() {}, true, true, false)
-	return e.ValueFactory.NewValue(out, false)
+	}, func() {}, true, false, false)
+	return e.ValueFactory.Value(out)
 }
 
 func filterRound(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -945,7 +976,7 @@ func filterRound(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Va
 		errors.ThrowFilterArgumentError("round(precision=0, method='common')", "unknown method '%s', must be one of 'common, 'floor', 'ceil'", method)
 	}
 	value := in.Float()
-	factor := float64(10 * p.GetKwarg("precision").Integer())
+	factor := math.Pow10(p.GetKwarg("precision").Integer())
 	if factor > 0 {
 		value = value * factor
 	}
@@ -953,7 +984,7 @@ func filterRound(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Va
 	if factor > 0 {
 		value = value / factor
 	}
-	return e.ValueFactory.NewValue(value, false)
+	return e.ValueFactory.Value(value)
 }
 
 func filterSafe(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -967,7 +998,7 @@ func filterSafe(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Val
 	}
 
 	// create a new [Value] container with the same value but safe
-	return e.ValueFactory.NewValue(in.Interface(), true)
+	return e.ValueFactory.SafeValue(in.Interface())
 }
 
 func filterSelect(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -981,7 +1012,7 @@ func filterSelect(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 	if len(params.Args) == 0 {
 		// Reject truthy value
 		test = func(in exec.Value) bool {
-			return in.IsTrue()
+			return in.Bool()
 		}
 	} else {
 		name := params.First().String()
@@ -991,7 +1022,7 @@ func filterSelect(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 		}
 		test = func(in exec.Value) bool {
 			out := e.ExecuteTestByName(name, in, testParams)
-			return out.IsTrue()
+			return out.Bool()
 		}
 	}
 
@@ -1004,7 +1035,7 @@ func filterSelect(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 		return true
 	}, func() {})
 
-	return e.ValueFactory.NewValue(out, false)
+	return e.ValueFactory.Value(out)
 }
 
 func filterSelectAttr(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1041,13 +1072,13 @@ func filterSelectAttr(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) ex
 
 	in.Iterate(func(idx, count int, key, value exec.Value) bool {
 		result := test(key)
-		if result.IsTrue() {
+		if result.Bool() {
 			out = append(out, key)
 		}
 		return true
 	}, func() {})
 
-	return e.ValueFactory.NewValue(out, false)
+	return e.ValueFactory.Value(out)
 }
 
 // XXX: make this filter behave like the python one
@@ -1066,21 +1097,21 @@ func filterSlice(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Va
 	// XXX: this stuff is original
 	comp := strings.Split(params.Args[0].String(), ":")
 	if len(comp) != 2 {
-		return e.ValueFactory.NewValue(fmt.Errorf("Slice string must have the format 'from:to' [from/to can be omitted, but the ':' is required]"), false)
+		return e.ValueFactory.Value(fmt.Errorf("Slice string must have the format 'from:to' [from/to can be omitted, but the ':' is required]"))
 	}
 
 	if !in.IsSliceable() {
 		return in
 	}
 
-	from := e.ValueFactory.NewValue(comp[0], false).Integer()
+	from := e.ValueFactory.Value(comp[0]).Integer()
 	to := in.Len()
 
 	if from > to {
 		from = to
 	}
 
-	vto := e.ValueFactory.NewValue(comp[1], false).Integer()
+	vto := e.ValueFactory.Value(comp[1]).Integer()
 	if vto >= from && vto <= in.Len() {
 		to = vto
 	}
@@ -1107,7 +1138,7 @@ func filterSort(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Val
 		out = append(out, key)
 		return true
 	}, func() {}, reverse, true, caseSensitive)
-	return e.ValueFactory.NewValue(out, false)
+	return e.ValueFactory.Value(out)
 }
 
 func filterString(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1120,7 +1151,7 @@ func filterString(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 		errors.ThrowFilterArgumentError("string()", p.Error())
 	}
 
-	return e.ValueFactory.NewValue(in.String(), false)
+	return e.ValueFactory.Value(in.String())
 }
 
 var reStriptags = regexp.MustCompile(`<[^>]*?>`)
@@ -1140,7 +1171,7 @@ func filterStriptags(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exe
 	// Strip all tags
 	s = reStriptags.ReplaceAllString(s, "")
 
-	return e.ValueFactory.NewValue(strings.TrimSpace(s), false)
+	return e.ValueFactory.Value(strings.TrimSpace(s))
 }
 
 func filterSum(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1149,7 +1180,7 @@ func filterSum(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Valu
 		defer fm.End()
 	}
 	debug.Print("call filter with raw args: sum(%s)", params.String())
-	p := params.Expect(0, []*exec.Kwarg{{"attribute", nil}, {"start", 0}})
+	p := params.Expect(0, []*exec.Kwarg{{"attribute", nil}, {"start", 0.0}})
 	if p.IsError() {
 		errors.ThrowFilterArgumentError("sum(attribute=nil, start=0)", p.Error())
 	}
@@ -1162,7 +1193,7 @@ func filterSum(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Valu
 	in.Iterate(func(idx, count int, key, value exec.Value) bool {
 		if attribute.IsString() {
 			val := key
-			for _, attr := range strings.Split(attribute.String(), ".") {
+			for _, attr := range strings.Split(stringValue(attribute), ".") {
 				val = val.GetItem(attr)
 			}
 			if val.IsNumber() {
@@ -1178,11 +1209,11 @@ func filterSum(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Valu
 	}, func() {})
 
 	if err != nil {
-		return e.ValueFactory.NewValue(err, false)
+		return e.ValueFactory.Value(err)
 	} else if sum == math.Trunc(sum) {
-		return e.ValueFactory.NewValue(int64(sum), false)
+		return e.ValueFactory.Value(int64(sum))
 	}
-	return e.ValueFactory.NewValue(sum, false)
+	return e.ValueFactory.Value(sum)
 }
 
 func filterTitle(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1196,9 +1227,9 @@ func filterTitle(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Va
 	}
 
 	if !in.IsString() {
-		return e.ValueFactory.NewValue("", false)
+		return e.ValueFactory.Value("")
 	}
-	return e.ValueFactory.NewValue(strings.Title(strings.ToLower(in.String())), false)
+	return e.ValueFactory.Value(strings.Title(strings.ToLower(in.String())))
 }
 
 func filterTrim(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1211,7 +1242,7 @@ func filterTrim(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Val
 		errors.ThrowFilterArgumentError("trim()", p.Error())
 	}
 
-	return e.ValueFactory.NewValue(strings.TrimSpace(in.String()), false)
+	return e.ValueFactory.Value(strings.TrimSpace(in.String()))
 }
 
 func filterToJSON(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1243,7 +1274,7 @@ func filterToJSON(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 	} else {
 		errors.ThrowFilterArgumentError("tojson(indent=nil)", "expected an integer for 'indent', got '%s'", indent.String())
 	}
-	return e.ValueFactory.NewValue(out, true)
+	return e.ValueFactory.SafeValue(out)
 }
 
 func filterTruncate(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1267,7 +1298,7 @@ func filterTruncate(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec
 	length := p.GetKwarg("length").Integer()
 	leeway := p.GetKwarg("leeway").Integer()
 	killwords := p.GetKwarg("killwords").Bool()
-	end := p.GetKwarg("end").String()
+	end := stringValue(p.GetKwarg("end"))
 	rEnd := []rune(end)
 	fullLength := length + leeway
 	runes := []rune(source)
@@ -1277,7 +1308,7 @@ func filterTruncate(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec
 	}
 
 	if len(runes) <= fullLength {
-		return e.ValueFactory.NewValue(source, false)
+		return e.ValueFactory.Value(source)
 	}
 
 	atLength := string(runes[:length-len(rEnd)])
@@ -1287,7 +1318,7 @@ func filterTruncate(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec
 		})
 		atLength = strings.TrimRight(atLength, " \n\t")
 	}
-	return e.ValueFactory.NewValue(fmt.Sprintf("%s%s", atLength, end), false)
+	return e.ValueFactory.Value(fmt.Sprintf("%s%s", atLength, end))
 }
 
 func filterUnique(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1312,7 +1343,7 @@ func filterUnique(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 	in.Iterate(func(idx, count int, key, value exec.Value) bool {
 		val := key
 		if attribute.IsString() {
-			attr := attribute.String()
+			attr := stringValue(attribute)
 			val = key.GetItem(attr)
 		}
 		tracked := val.Interface()
@@ -1327,9 +1358,9 @@ func filterUnique(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 	}, func() {})
 
 	if err != nil {
-		return e.ValueFactory.NewValue(err, false)
+		return e.ValueFactory.Value(err)
 	}
-	return e.ValueFactory.NewValue(out, false)
+	return e.ValueFactory.Value(out)
 }
 
 func filterUpper(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1342,7 +1373,7 @@ func filterUpper(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Va
 		errors.ThrowFilterArgumentError("upper()", p.Error())
 	}
 
-	return e.ValueFactory.NewValue(strings.ToUpper(in.String()), false)
+	return e.ValueFactory.Value(strings.ToUpper(in.String()))
 }
 
 func filterUrlencode(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1355,14 +1386,34 @@ func filterUrlencode(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exe
 		errors.ThrowFilterArgumentError("urlencode()", p.Error())
 	}
 
-	return e.ValueFactory.NewValue(url.QueryEscape(in.String()), false)
+	return e.ValueFactory.Value(url.QueryEscape(in.String()))
 }
 
 // TODO: This regexp could do some work
-var filterUrlizeURLRegexp = regexp.MustCompile(`((((http|https)://)|www\.|((^|[ ])[0-9A-Za-z_\-]+(\.com|\.net|\.org|\.info|\.biz|\.de))))(?U:.*)([ ]+|$)`)
-var filterUrlizeEmailRegexp = regexp.MustCompile(`(\w+@\w+\.\w{2,4})`)
+var (
+	filterUrlizeURLRegexp   = regexp.MustCompile(`((((http|https)://)|www\.|((^|[ ])[0-9A-Za-z_\-]+(\.com|\.net|\.org|\.info|\.biz|\.de))))(?U:.*)([ ]+|$)`)
+	filterUrlizeEmailRegexp = regexp.MustCompile(`(\w+@\w+\.\w{2,4})`)
+)
 
-func filterUrlizeHelper(input string, trunc int, rel string, target string) (string, error) {
+func filterUrlizeHelper(input string, trunc int, rel, target string) (string, error) {
+	truncate := func(title string) string {
+		if trunc > 0 && len(title) > trunc {
+			// truncate title in utf-8 safe way
+			// utf8.RuneCountInString is faster than utf8.DecodeLastRuneInString
+			// and we don't need the actual rune
+			countRunes := 0
+			for idx := range title {
+				if countRunes == trunc {
+					title = title[:idx]
+					title = fmt.Sprintf("%s...", title)
+					break
+				}
+				countRunes++
+			}
+		}
+		return title
+	}
+
 	var soutErr error
 	sout := filterUrlizeURLRegexp.ReplaceAllStringFunc(input, func(raw_url string) string {
 		var prefix string
@@ -1379,16 +1430,11 @@ func filterUrlizeHelper(input string, trunc int, rel string, target string) (str
 		url := u.IRIEncode(raw_url)
 
 		if !strings.HasPrefix(url, "http") {
-			url = fmt.Sprintf("http://%s", url)
+			url = fmt.Sprintf("https://%s", url)
 		}
 
-		title := raw_url
-
-		if trunc > 3 && len(title) > trunc {
-			title = fmt.Sprintf("%s...", title[:trunc-3])
-		}
-
-		title = u.HTMLEscape(title)
+		title := truncate(raw_url)
+		title = html.EscapeString(title)
 
 		attrs := ""
 		if len(target) > 0 {
@@ -1410,12 +1456,7 @@ func filterUrlizeHelper(input string, trunc int, rel string, target string) (str
 	}
 
 	sout = filterUrlizeEmailRegexp.ReplaceAllStringFunc(sout, func(mail string) string {
-		title := mail
-
-		if trunc > 3 && len(title) > trunc {
-			title = fmt.Sprintf("%s...", title[:trunc-3])
-		}
-
+		title := mail // no truncation for email
 		return fmt.Sprintf(`<a href="mailto:%s">%s</a>`, mail, title)
 	})
 	return sout, nil
@@ -1445,12 +1486,12 @@ func filterUrlize(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.V
 	rel := p.GetKwarg("rel")
 	target := p.GetKwarg("target")
 
-	s, err := filterUrlizeHelper(in.String(), truncate, rel.String(), target.String())
+	s, err := filterUrlizeHelper(in.String(), truncate, stringValue(rel), stringValue(target))
 	if err != nil {
-		return e.ValueFactory.NewValue(err, false)
+		return e.ValueFactory.Value(err)
 	}
 
-	return e.ValueFactory.NewValue(s, false)
+	return e.ValueFactory.Value(s)
 }
 
 func filterWordcount(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1463,7 +1504,7 @@ func filterWordcount(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exe
 		errors.ThrowFilterArgumentError("wordcount()", p.Error())
 	}
 
-	return e.ValueFactory.NewValue(len(strings.Fields(in.String())), false)
+	return e.ValueFactory.Value(len(strings.Fields(in.String())))
 }
 
 func filterWordwrap(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1495,7 +1536,7 @@ func filterWordwrap(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec
 	for i := 0; i < linecount; i++ {
 		lines = append(lines, strings.Join(words[wrapAt*i:u.Min(wrapAt*(i+1), wordsLen)], " "))
 	}
-	return e.ValueFactory.NewValue(strings.Join(lines, "\n"), false)
+	return e.ValueFactory.Value(strings.Join(lines, "\n"))
 }
 
 func filterXMLAttr(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.Value {
@@ -1513,7 +1554,7 @@ func filterXMLAttr(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.
 	autospace := p.GetKwarg("autospace").Bool()
 	kvs := []string{}
 	in.Iterate(func(idx, count int, key, value exec.Value) bool {
-		if !value.IsTrue() {
+		if !value.Bool() {
 			return true
 		}
 		kv := fmt.Sprintf(`%s="%s"`, key.Escaped(), value.Escaped())
@@ -1524,5 +1565,12 @@ func filterXMLAttr(e *exec.Evaluator, in exec.Value, params *exec.VarArgs) exec.
 	if autospace {
 		out = " " + out
 	}
-	return e.ValueFactory.NewValue(out, false)
+	return e.ValueFactory.Value(out)
+}
+
+func stringValue(val exec.Value) string {
+	if val.IsNil() {
+		return ""
+	}
+	return val.String()
 }

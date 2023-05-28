@@ -14,8 +14,10 @@ type SetStmt struct {
 	Expression parse.Expression
 }
 
-var _ parse.Statement = (*SetStmt)(nil)
-var _ exec.Statement = (*SetStmt)(nil)
+var (
+	_ parse.Statement = (*SetStmt)(nil)
+	_ exec.Statement  = (*SetStmt)(nil)
+)
 
 func (stmt *SetStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *SetStmt) String() string {
@@ -42,7 +44,7 @@ func (stmt *SetStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 	}
 }
 
-func setParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func setParser(p, args *parse.Parser) parse.Statement {
 	stmt := &SetStmt{
 		Location: p.Current(),
 	}

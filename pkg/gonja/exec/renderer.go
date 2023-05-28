@@ -35,7 +35,7 @@ func (ts *TrimState) TrimBlocks(r rune) bool {
 type Renderer struct {
 	*EvalConfig
 	Ctx          *Context
-	ValueVactory *ValueFactory
+	ValueFactory *ValueFactory
 	Template     *Template
 	Root         *parse.TemplateNode
 	Current      parse.Node
@@ -49,7 +49,7 @@ func NewRenderer(ctx *Context, valueVactory *ValueFactory, out *strings.Builder,
 	r := &Renderer{
 		EvalConfig:   cfg,
 		Ctx:          ctx,
-		ValueVactory: valueVactory,
+		ValueFactory: valueVactory,
 		Template:     tpl,
 		Root:         tpl.Root,
 		Out:          out,
@@ -64,7 +64,7 @@ func (r *Renderer) Inherit() *Renderer {
 	sub := &Renderer{
 		EvalConfig:   r.EvalConfig.Inherit(),
 		Ctx:          r.Ctx.Inherit(),
-		ValueVactory: r.ValueVactory,
+		ValueFactory: r.ValueFactory,
 		Template:     r.Template,
 		Current:      r.Current,
 		Root:         r.Root,

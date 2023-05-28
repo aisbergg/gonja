@@ -49,8 +49,8 @@ func (fs *FilterSet) Update(other FilterSet) FilterSet {
 	return *fs
 }
 
-// EvaluateFiltered evaluates a filtered expression.
-func (e *Evaluator) EvaluateFiltered(expr *parse.FilteredExpression) Value {
+// evalFiltered evaluates a filtered expression.
+func (e *Evaluator) evalFiltered(expr *parse.FilteredExpression) Value {
 	value := e.Eval(expr.Expression)
 	for _, filter := range expr.Filters {
 		value = e.ExecuteFilter(filter, value)
@@ -77,7 +77,7 @@ func (e *Evaluator) ExecuteFilter(fc *parse.FilterCall, v Value) Value {
 // ExecuteFilterByName execute a filter given its name
 func (e *Evaluator) ExecuteFilterByName(name string, in Value, params *VarArgs) Value {
 	if !e.Filters.Exists(name) {
-		return e.ValueFactory.NewValue(fmt.Errorf("Filter '%s' not found", name), false)
+		return e.ValueFactory.Value(fmt.Errorf("Filter '%s' not found", name))
 	}
 	fn := (*e.Filters)[name]
 

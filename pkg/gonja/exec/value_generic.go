@@ -2,14 +2,17 @@ package exec
 
 import (
 	"fmt"
+	"html"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
+	"unicode"
+	"unicode/utf8"
 
 	debug "github.com/aisbergg/gonja/internal/debug/exec"
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
-	u "github.com/aisbergg/gonja/pkg/gonja/utils"
 )
 
 var _ Value = (*GenericValue)(nil)
@@ -27,6 +30,11 @@ type GenericValue struct {
 
 	// precomputed to improve performance
 	valueType reflect.Type
+}
+
+// Type returns the type of the value.
+func (v *GenericValue) Type() reflect.Type {
+	return v.valueType
 }
 
 // IsString reports whether the underlying value is a string.
@@ -78,56 +86,12 @@ func (v *GenericValue) IsList() bool {
 func (v *GenericValue) IsDict() bool {
 	return v.IndirectValue.IsValid() &&
 		(v.IndirectValue.Kind() == reflect.Map ||
-			(v.IndirectValue.Kind() == reflect.Struct && v.IndirectValue.Type() == rtDict))
+			(v.IndirectValue.Kind() == reflect.Struct && v.valueType == rtDict))
 }
 
 // IsNil reports whether the underlying value is NIL.
 func (v *GenericValue) IsNil() bool {
 	return !v.IndirectValue.IsValid()
-}
-
-// IsTrue tries to evaluate the underlying value the Pythonic-way:
-//
-// Returns TRUE in one the following cases:
-//
-//   - int != 0
-//   - uint != 0
-//   - float != 0.0
-//   - len(array/chan/map/slice/string) > 0
-//   - bool == true
-//   - underlying value is a struct
-//
-// Otherwise returns always FALSE.
-func (v *GenericValue) IsTrue() bool {
-	if v.IsNil() {
-		return false
-	}
-
-	switch v.IndirectValue.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.IndirectValue.Int() != 0
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return v.IndirectValue.Uint() != 0
-
-	case reflect.Float32, reflect.Float64:
-		return v.IndirectValue.Float() != 0
-
-	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
-		return v.IndirectValue.Len() > 0
-
-	case reflect.Bool:
-		return v.IndirectValue.Bool()
-
-	case reflect.Struct:
-		return true // struct instance is always true
-
-	default:
-		errors.ThrowTemplateRuntimeError("type %s cannot be evaluated to boolean", v.IndirectValue.Kind().String())
-	}
-
-	// unreachable
-	return false
 }
 
 // IsCallable reports whether the underlying value is a callable function.
@@ -185,7 +149,7 @@ func (v *GenericValue) ReflectValue() reflect.Value {
 // their respective type name.
 func (v *GenericValue) String() string {
 	if v.IsNil() {
-		return ""
+		return "None"
 	}
 	resolved := v.IndirectValue
 
@@ -217,9 +181,20 @@ func (v *GenericValue) String() string {
 		return "False"
 
 	case reflect.Struct:
-		if t, ok := v.Interface().(fmt.Stringer); ok {
+		val := v.Interface()
+		// standard time format used by Python's datetime module
+		if t, ok := val.(time.Time); ok {
+			if t.Nanosecond() == 0 {
+				// omit nanoseconds if not set
+				return t.Format("2006-01-02 15:04:05-07:00")
+			}
+			return t.Format("2006-01-02 15:04:05.000000-07:00")
+		}
+		// try with String() method
+		if t, ok := val.(fmt.Stringer); ok {
 			return t.String()
 		}
+		return fmt.Sprintf("<%s>", v.valueType)
 
 	case reflect.Slice, reflect.Array:
 		var out strings.Builder
@@ -262,6 +237,39 @@ func (v *GenericValue) String() string {
 		sort.Strings(pairs)
 		return fmt.Sprintf("{%s}", strings.Join(pairs, ", "))
 
+	case reflect.Func:
+		// format function like this:
+		//   <function(arg1, arg2, argN)>
+		//   <function(arg1, arg2, argN) ret>
+		//   <function(arg1, arg2, argN) (ret1, re2)>
+		typ := resolved.Type()
+		if typ.NumIn() == 0 {
+			return "<function()>"
+		}
+		// get args
+		args := []string{}
+		for i := 0; i < typ.NumIn(); i++ {
+			if typ.IsVariadic() && i == typ.NumIn()-1 {
+				args = append(args, fmt.Sprintf("...%s", typ.In(i).String()))
+				break
+			}
+			args = append(args, typ.In(i).String())
+		}
+		// get return values
+		rets := []string{}
+		if typ.NumOut() > 0 {
+			for i := 0; i < typ.NumOut(); i++ {
+				rets = append(rets, typ.Out(i).String())
+			}
+		}
+		// format
+		if len(rets) > 1 {
+			return fmt.Sprintf("<function(%s) (%s)>", strings.Join(args, ", "), strings.Join(rets, ", "))
+		} else if len(rets) == 1 {
+			return fmt.Sprintf("<function(%s) %s>", strings.Join(args, ", "), rets[0])
+		}
+		return fmt.Sprintf("<function(%s)>", strings.Join(args, ", "))
+
 	default:
 		errors.ThrowTemplateRuntimeError("Value.String() not implemented for type: %s", resolved.Kind().String())
 	}
@@ -269,9 +277,10 @@ func (v *GenericValue) String() string {
 	return ""
 }
 
-// Escaped returns the escaped version of String()
+// Escaped returns the HTML escaped version of String()
 func (v *GenericValue) Escaped() string {
-	return u.HTMLEscape(v.String())
+	return html.EscapeString(v.String())
+	// return u.HTMLEscape(v.String())
 }
 
 // Integer returns the underlying value as an integer (converts the underlying
@@ -279,7 +288,7 @@ func (v *GenericValue) Escaped() string {
 // it will return 0.
 func (v *GenericValue) Integer() int {
 	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil cannot be converted to integer")
+		return 0
 	}
 
 	switch v.IndirectValue.Kind() {
@@ -313,7 +322,7 @@ func (v *GenericValue) Integer() int {
 // it will return 0.0.
 func (v *GenericValue) Float() float64 {
 	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil cannot be converted to float")
+		return 0.0
 	}
 
 	switch v.IndirectValue.Kind() {
@@ -342,20 +351,46 @@ func (v *GenericValue) Float() float64 {
 	return 0.0
 }
 
-// Bool returns the underlying value as bool. If the value is not bool, false
-// will always be returned. If you're looking for true/false-evaluation of the
-// underlying value, have a look on the IsTrue()-function.
+// Bool returns the underlying value as bool. Non bool values will be evaluated
+// to true in the following cases:
+//
+//   - int != 0
+//   - uint != 0
+//   - float != 0.0
+//   - len(array/chan/map/slice/string) > 0
+//   - bool == true
+//   - underlying value is a struct
+//
+// Otherwise returns always FALSE.
 func (v *GenericValue) Bool() bool {
 	if v.IsNil() {
-		errors.ThrowTemplateRuntimeError("nil cannot be converted to bool")
+		return false
 	}
 
 	switch v.IndirectValue.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.IndirectValue.Int() != 0
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return v.IndirectValue.Uint() != 0
+
+	case reflect.Float32, reflect.Float64:
+		return v.IndirectValue.Float() != 0
+
+	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
+		return v.IndirectValue.Len() > 0
+
 	case reflect.Bool:
 		return v.IndirectValue.Bool()
 
+	case reflect.Struct:
+		return true // struct instance is always true
+
+	case reflect.Func:
+		return true // function is always true
+
 	default:
-		errors.ThrowTemplateRuntimeError("type %s cannot be converted to boolean", v.IndirectValue.Kind().String())
+		errors.ThrowTemplateRuntimeError("type %s cannot be evaluated to boolean", v.IndirectValue.Kind().String())
 	}
 
 	// unreachable
@@ -393,11 +428,11 @@ func (v *GenericValue) Slice(i, j int) Value {
 
 	switch v.IndirectValue.Kind() {
 	case reflect.Array, reflect.Slice:
-		return v.valueFactory.NewValue(v.IndirectValue.Slice(i, j), false)
+		return v.valueFactory.Value(v.IndirectValue.Slice(i, j))
 
 	case reflect.String:
 		runes := []rune(v.IndirectValue.String())
-		return v.valueFactory.NewValue(string(runes[i:j]), false)
+		return v.valueFactory.Value(string(runes[i:j]))
 
 	default:
 		errors.ThrowTemplateRuntimeError("type %s cannot be sliced", v.IndirectValue.Kind().String())
@@ -418,29 +453,27 @@ func (v *GenericValue) Index(i int) Value {
 			i = v.Len() + i
 		}
 		if i >= v.Len() || i < 0 {
-			return v.valueFactory.NewValue(reflect.Zero(v.IndirectValue.Type()).Interface(), false)
+			return v.valueFactory.Value(reflect.Zero(v.IndirectValue.Type()).Interface())
 		}
-		return v.valueFactory.NewValue(v.IndirectValue.Index(i).Interface(), false)
+		return v.valueFactory.Value(v.IndirectValue.Index(i).Interface())
 
 	case reflect.String:
 		s := v.IndirectValue.String()
 		if i >= len(s) {
-			return v.valueFactory.NewValue("", false)
-		}
-		if i >= 0 {
-			for j, ch := range s {
-				if j == i {
-					return v.valueFactory.NewValue(string(ch), false)
-				}
-			}
-			return v.valueFactory.NewValue("", false)
+			return v.valueFactory.Value("")
 		}
 		runes := []rune(s)
+		if i >= 0 {
+			if i >= len(runes) {
+				return v.valueFactory.Value("")
+			}
+			return v.valueFactory.Value(string(runes[i]))
+		}
 		i = len(runes) + i
 		if i < 0 {
-			return v.valueFactory.NewValue("", false)
+			return v.valueFactory.Value("")
 		}
-		return v.valueFactory.NewValue(string(runes[i]), false)
+		return v.valueFactory.Value(string(runes[i]))
 
 	default:
 		errors.ThrowTemplateRuntimeError("type %s cannot be indexed", v.IndirectValue.Kind().String())
@@ -462,7 +495,7 @@ func (v *GenericValue) Contains(other Value) bool {
 	resolved := v.IndirectValue
 	switch resolved.Kind() {
 	case reflect.Struct:
-		if dict, ok := resolved.Interface().(*Dict); ok {
+		if dict, ok := v.Value.Interface().(*Dict); ok {
 			return dict.Keys().Contains(other)
 		}
 		fldVal := resolved.FieldByName(other.String())
@@ -516,9 +549,8 @@ func (v *GenericValue) Keys() ValuesList {
 
 	} else if v.IndirectValue.Kind() == reflect.Map {
 		for _, key := range v.IndirectValue.MapKeys() {
-			keys = append(keys, v.valueFactory.NewValue(key, false))
+			keys = append(keys, v.valueFactory.Value(key))
 		}
-		sort.Sort(caseInsensitive(keys))
 		return keys
 	}
 
@@ -542,7 +574,7 @@ func (v *GenericValue) Values() ValuesList {
 	} else if v.IndirectValue.Kind() == reflect.Map {
 		iter := v.IndirectValue.MapRange()
 		for iter.Next() {
-			values = append(values, v.valueFactory.NewValue(iter.Value(), false))
+			values = append(values, v.valueFactory.Value(iter.Value()))
 		}
 		return values
 	}
@@ -560,13 +592,12 @@ func (v *GenericValue) Items() []*Pair {
 	items := []*Pair{}
 	if v.valueType == rtDict {
 		return v.Value.Interface().(Dict).Pairs
-
 	} else if v.IndirectValue.Kind() == reflect.Map {
 		iter := v.IndirectValue.MapRange()
 		for iter.Next() {
 			items = append(items, &Pair{
-				Key:   v.valueFactory.NewValue(iter.Key(), false),
-				Value: v.valueFactory.NewValue(iter.Value(), false),
+				Key:   v.valueFactory.Value(iter.Key()),
+				Value: v.valueFactory.Value(iter.Value()),
 			})
 		}
 		return items
@@ -623,7 +654,7 @@ func (v *GenericValue) GetItem(key any) Value {
 		// check if value has a method with the given name
 		val := v.Value.MethodByName(name)
 		if val.IsValid() {
-			return v.valueFactory.NewValue(val, false)
+			return v.valueFactory.Value(val)
 		}
 
 		val = v.IndirectValue
@@ -642,6 +673,17 @@ func (v *GenericValue) GetItem(key any) Value {
 				} else if v.valueType == rtValue {
 					panic(fmt.Errorf("[BUG] reflect.Value was wrapped in a reflect.Value"))
 				}
+			}
+
+			// special handling for dict type
+			if v.valueType == rtDict {
+				dict := v.Value.Interface().(*Dict)
+				resVal, ok := dict.Get(v.valueFactory.Value(name))
+				if !ok {
+					debug.Print("dict has no key '%s' -> return undefined", name)
+					return v.valueFactory.NewUndefined(name, "dict has no key '%s'", name)
+				}
+				return resVal
 			}
 
 			structFlds := getStructFields(val)
@@ -675,13 +717,12 @@ func (v *GenericValue) GetItem(key any) Value {
 
 	if !resVal.CanInterface() {
 		errors.ThrowTemplateRuntimeError("cannot get value for key '%s'", key)
-
 	}
 	debug.Print("return value")
 	if resVal.Type() == rtValue {
 		return resVal.Interface().(Value)
 	}
-	return v.valueFactory.NewValue(resVal, false)
+	return v.valueFactory.Value(resVal)
 }
 
 // XXX: need to work on that
@@ -723,16 +764,16 @@ func (v *GenericValue) SetItem(key string, value interface{}) {
 //
 // If the underlying value has no items or is not one of the types above, the
 // empty function (function's second argument) will be called.
-func (v *GenericValue) Iterate(fn func(idx, count int, key, value Value) bool, empty func()) {
+func (v *GenericValue) Iterate(fn func(idx, count int, key, value Value) (cont bool), empty func()) {
 	v.IterateOrder(fn, empty, false, false, false)
 }
 
-// IterateOrder behaves like `Value.Iterate`, but can iterate through an
+// IterateOrder behaves like [Value.Iterate], but can iterate through an
 // array/slice/string in reverse. Does not affect the iteration through a map
 // because maps don't have any particular order. However, you can force an order
 // using the `sorted` keyword (and even use `reversed sorted`).
 func (v *GenericValue) IterateOrder(
-	fn func(idx, count int, key, value Value) bool,
+	fn func(idx, count int, key, value Value) (cont bool),
 	empty func(),
 	reverse bool,
 	sorted bool,
@@ -746,109 +787,117 @@ func (v *GenericValue) IterateOrder(
 	switch rflVal.Kind() {
 	case reflect.Map:
 		keys := rflVal.MapKeys()
+		keysCount := len(keys)
+		if keysCount == 0 {
+			empty()
+			return
+		}
+
 		if sorted {
+			sortKeys := sortRefelctValues(keys, caseSensitive)
 			if reverse {
-				if !caseSensitive {
-					// XXX: needs to be implemented
-					sort.Sort(sort.Reverse(caseInsensitive(sortRefelctValuesList(keys))))
-				} else {
-					sort.Sort(sort.Reverse(sortRefelctValuesList(keys)))
-				}
+				sort.Sort(sort.Reverse(sortKeys))
 			} else {
-				if !caseSensitive {
-					sort.Sort(caseInsensitive(sortRefelctValuesList(keys)))
-				} else {
-					sort.Sort(sortRefelctValuesList(keys))
+				sort.Sort(sortKeys)
+			}
+
+		} else if reverse {
+			// reverse order without sorting
+			for i := keysCount - 1; i >= 0; i-- {
+				key := keys[i]
+				value := rflVal.MapIndex(key)
+				if !fn(keysCount-i-1, keysCount, v.valueFactory.Value(key), v.valueFactory.Value(value)) {
+					return
 				}
 			}
+			return
 		}
-		keyLen := len(keys)
+
 		for idx, key := range keys {
 			value := rflVal.MapIndex(key)
-			if !fn(idx, keyLen, v.valueFactory.NewValue(key, false), v.valueFactory.NewValue(value, false)) {
+			if !fn(idx, keysCount, v.valueFactory.Value(key), v.valueFactory.Value(value)) {
 				return
 			}
 		}
-		if keyLen == 0 {
-			empty()
-		}
+
 		return // done
 
 	case reflect.Array, reflect.Slice:
 		var items ValuesList
-
-		itemCount := rflVal.Len()
-		for i := 0; i < itemCount; i++ {
-			items = append(items, v.valueFactory.NewValue(rflVal.Index(i), false))
+		var itemCount int
+		if v.valueType == rtValuesList {
+			items = v.Value.Interface().(ValuesList)
+			itemCount = len(items)
+		} else {
+			itemCount = rflVal.Len()
+			items = make(ValuesList, 0, itemCount)
+			for i := 0; i < itemCount; i++ {
+				items = append(items, v.valueFactory.Value(rflVal.Index(i).Interface()))
+			}
+		}
+		if itemCount == 0 {
+			empty()
+			return
 		}
 
 		if sorted {
+			sortItems := sortValuesList(items, caseSensitive)
 			if reverse {
-				if !caseSensitive && items[0].IsString() {
-					sort.Slice(items, func(i, j int) bool {
-						return strings.ToLower(items[i].String()) > strings.ToLower(items[j].String())
-					})
-				} else {
-					sort.Sort(sort.Reverse(items))
-				}
+				sort.Sort(sort.Reverse(sortItems))
 			} else {
-				if !caseSensitive && items[0].IsString() {
-					sort.Slice(items, func(i, j int) bool {
-						return strings.ToLower(items[i].String()) < strings.ToLower(items[j].String())
-					})
-				} else {
-					sort.Sort(items)
-				}
+				sort.Sort(sortItems)
 			}
-		} else {
-			if reverse {
-				for i := 0; i < itemCount/2; i++ {
-					items[i], items[itemCount-1-i] = items[itemCount-1-i], items[i]
-				}
-			}
-		}
 
-		if len(items) > 0 {
-			for idx, item := range items {
-				if !fn(idx, itemCount, item, nil) {
+		} else if reverse {
+			// reverse order without sorting
+			for i := itemCount - 1; i >= 0; i-- {
+				if !fn(itemCount-i-1, itemCount, items[i], nil) {
 					return
 				}
 			}
-		} else {
-			empty()
+			return
 		}
+
+		for i, item := range items {
+			if !fn(i, itemCount, item, nil) {
+				return
+			}
+		}
+
 		return // done
 
 	case reflect.String:
-		if sorted {
-			r := []rune(rflVal.String())
-			if caseSensitive {
-				sort.Sort(sortRunes(r))
-			} else {
-				sort.Sort(caseInsensitive(sortRunes(r)))
-			}
-			rflVal = reflect.ValueOf(string(r))
+		runes := []rune(rflVal.String())
+		runesCount := len(runes)
+		if runesCount == 0 {
+			empty()
+			return
 		}
 
-		// TODO: Not utf8-compatible (utf8-decoding necessary)
-		charCount := rflVal.Len()
-		if charCount > 0 {
+		if sorted {
+			sortRunes := sortRunes(runes, caseSensitive)
 			if reverse {
-				for i := charCount - 1; i >= 0; i-- {
-					if !fn(i, charCount, v.valueFactory.NewValue(rflVal.Slice(i, i+1), false), nil) {
-						return
-					}
-				}
+				sort.Sort(sort.Reverse(sortRunes))
 			} else {
-				for i := 0; i < charCount; i++ {
-					if !fn(i, charCount, v.valueFactory.NewValue(rflVal.Slice(i, i+1), false), nil) {
-						return
-					}
+				sort.Sort(sortRunes)
+			}
+
+		} else if reverse {
+			// reverse order without sorting
+			for i := runesCount - 1; i >= 0; i-- {
+				if !fn(runesCount-i-1, runesCount, v.valueFactory.Value(string(runes[i])), nil) {
+					return
 				}
 			}
-		} else {
-			empty()
+			return
 		}
+
+		for i, r := range runes {
+			if !fn(i, runesCount, v.valueFactory.Value(string(r)), nil) {
+				return
+			}
+		}
+
 		return // done
 
 	case reflect.Chan:
@@ -861,47 +910,56 @@ func (v *GenericValue) IterateOrder(
 			items = append(items, value)
 		}
 		count := len(items)
-		if count > 0 {
-			for idx, value := range items {
-				fn(idx, count, v.valueFactory.NewValue(value, false), nil)
-			}
-		} else {
+		if count == 0 {
 			empty()
+			return
 		}
-		return
+		for idx, value := range items {
+			fn(idx, count, v.valueFactory.Value(value), nil)
+		}
+
+		return // done
 
 	case reflect.Struct:
-		if rflVal.Type() != rtDict {
+		if v.valueType != rtDict {
 			errors.ThrowTemplateRuntimeError("Value.Iterate() not available for type: %s", rflVal.Kind().String())
 		}
-		dict := rflVal.Interface().(Dict)
+		dict := v.Value.Interface().(*Dict)
 		keys := dict.Keys()
-		length := len(dict.Pairs)
-		if sorted {
-			if reverse {
-				if !caseSensitive {
-					sort.Sort(sort.Reverse(caseInsensitive(keys)))
-				} else {
-					sort.Sort(sort.Reverse(keys))
-				}
-			} else {
-				if !caseSensitive {
-					sort.Sort(caseInsensitive(keys))
-				} else {
-					sort.Sort(keys)
-				}
-			}
+		keysCount := len(dict.Pairs)
+		if keysCount == 0 {
+			empty()
+			return
 		}
-		if len(keys) > 0 {
-			for idx, key := range keys {
+
+		if sorted {
+			sortKeys := sortValuesList(keys, caseSensitive)
+			if reverse {
+				sort.Sort(sort.Reverse(sortKeys))
+			} else {
+				sort.Sort(sortKeys)
+			}
+
+		} else if reverse {
+			// reverse order without sorting
+			for i := keysCount - 1; i >= 0; i-- {
+				key := keys[i]
 				item, _ := dict.Get(key)
-				if !fn(idx, length, key, item) {
+				if !fn(keysCount-i-1, keysCount, key, item) {
 					return
 				}
 			}
-		} else {
-			empty()
+			return
 		}
+
+		for i, key := range keys {
+			item, _ := dict.Get(key)
+			if !fn(i, keysCount, key, item) {
+				return
+			}
+		}
+
+		return // done
 
 	default:
 		errors.ThrowTemplateRuntimeError("type %s cannot be iterated", rflVal.Kind().String())
@@ -911,7 +969,7 @@ func (v *GenericValue) IterateOrder(
 // EqualValueTo reports whether two values are containing the same value or
 // object.
 func (v *GenericValue) EqualValueTo(other Value) bool {
-	// comparison of uint with int fails using .Interface()-comparison (see issue #64)
+	// comparison of uint with int fails using .Interface()-comparison
 	if v.IsInteger() && other.IsInteger() {
 		return v.Integer() == other.Integer()
 	}
@@ -975,107 +1033,213 @@ type sortable interface {
 	int64 | uint64 | float64 | string
 }
 
-// sortRefelctValuesList returns a sort.Interface that can be used to sort a
+// sortRefelctValues returns a sort.Interface that can be used to sort a
 // list of [reflect.Value]s.
-func sortRefelctValuesList(values []reflect.Value) sort.Interface {
+func sortRefelctValues(values []reflect.Value, caseSensitive bool) sort.Interface {
 	if len(values) == 0 {
 		return nil
 	}
 	switch values[0].Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return refelctValuesList[int64]{Values: values, GetValueFn: func(v reflect.Value) any { return v.Int() }}
+		return sortrefelctValuesImpl[int64]{Values: values, GetValueFn: func(v reflect.Value) any { return v.Int() }}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return refelctValuesList[uint64]{Values: values, GetValueFn: func(v reflect.Value) any { return v.Uint() }}
+		return sortrefelctValuesImpl[uint64]{Values: values, GetValueFn: func(v reflect.Value) any { return v.Uint() }}
 	case reflect.Float32, reflect.Float64:
-		return refelctValuesList[float64]{Values: values, GetValueFn: func(v reflect.Value) any { return v.Float() }}
+		return sortrefelctValuesImpl[float64]{Values: values, GetValueFn: func(v reflect.Value) any { return v.Float() }}
 	case reflect.String:
-		return refelctValuesList[string]{Values: values, GetValueFn: func(v reflect.Value) any { return v.String() }}
+		if caseSensitive {
+			return sortrefelctValuesImpl[string]{Values: values, GetValueFn: func(v reflect.Value) any { return v.String() }}
+		}
+		return sortStringValuesCaseInsensitive(values)
 	}
+	// check if value type implements sort.Interface
+	if sortInterface, ok := values[0].Interface().(sort.Interface); ok {
+		return sortInterface
+	}
+	// can't sort it
 	return nil
 }
 
-type refelctValuesList[T sortable] struct {
+type sortrefelctValuesImpl[T sortable] struct {
 	Values     []reflect.Value
 	GetValueFn func(reflect.Value) any
 }
 
 // Len is the number of elements in the collection.
-func (vl refelctValuesList[T]) Len() int {
+func (vl sortrefelctValuesImpl[T]) Len() int {
 	return len(vl.Values)
 }
 
 // Less reports whether the element with index i must sort before the element
 // with index j.
-func (vl refelctValuesList[T]) Less(i, j int) bool {
+func (vl sortrefelctValuesImpl[T]) Less(i, j int) bool {
 	vi := vl.GetValueFn(vl.Values[i]).(T)
 	vj := vl.GetValueFn(vl.Values[j]).(T)
 	return vi < vj
 }
 
 // Swap swaps the elements with indexes i and j.
-func (vl refelctValuesList[T]) Swap(i, j int) {
+func (vl sortrefelctValuesImpl[T]) Swap(i, j int) {
 	vl.Values[i], vl.Values[j] = vl.Values[j], vl.Values[i]
 }
 
-// sortRunes implements [sort.Interface] for sorting a slice of runes.
-type sortRunes []rune
+// sortStringValuesCaseInsensitive returns a sort.Interface that can be used to
+// sort a list of strings wrapped in reflect.Value in a case insensitive way.
+func sortStringValuesCaseInsensitive(values []reflect.Value) sort.Interface {
+	return sortStringValuesCaseInsensitiveImpl{Values: values}
+}
+
+// sortStringValuesCaseInsensitiveImpl is a sort.Interface implementation for
+// sorting a list of strings wrapped in reflect.Value in a case insensitive way.
+type sortStringValuesCaseInsensitiveImpl struct {
+	Values []reflect.Value
+}
 
 // Len is the number of elements in the collection.
-func (s sortRunes) Len() int {
+func (sl sortStringValuesCaseInsensitiveImpl) Len() int {
+	return len(sl.Values)
+}
+
+// Less reports whether the element with index i must sort before the element
+// with index j.
+func (sl sortStringValuesCaseInsensitiveImpl) Less(i, j int) bool {
+	a := sl.Values[i].String()
+	b := sl.Values[j].String()
+	return stringLessCaseInsensitive(a, b)
+}
+
+func stringLessCaseInsensitive(a, b string) bool {
+	for {
+		if len(b) == 0 {
+			return false
+		}
+		if len(a) == 0 {
+			return true
+		}
+		ad, aSize := utf8.DecodeRuneInString(a)
+		bd, bSize := utf8.DecodeRuneInString(b)
+
+		aLower := unicode.ToLower(ad)
+		bLower := unicode.ToLower(bd)
+
+		if aLower < bLower {
+			return true
+		}
+		if aLower > bLower {
+			return false
+		}
+
+		a = a[aSize:]
+		b = b[bSize:]
+	}
+}
+
+// Swap swaps the elements with indexes i and j.
+func (sl sortStringValuesCaseInsensitiveImpl) Swap(i, j int) {
+	sl.Values[i], sl.Values[j] = sl.Values[j], sl.Values[i]
+}
+
+// sortRunes returns a sort.Interface that can be used to sort a
+// list of runes.
+func sortRunes(runes []rune, caseSensitive bool) sort.Interface {
+	if len(runes) == 0 {
+		return nil
+	}
+	if caseSensitive {
+		return sortRunesCaseSensitiveImpl(runes)
+	}
+	return sortRunesCaseInsensitive(runes)
+}
+
+// sortRunesCaseSensitiveImpl implements [sort.Interface] for sorting a slice of runes.
+type sortRunesCaseSensitiveImpl []rune
+
+// Len is the number of elements in the collection.
+func (s sortRunesCaseSensitiveImpl) Len() int {
 	return len(s)
 }
 
 // Less reports whether the element with index i must sort before the element
 // with index j.
-func (s sortRunes) Less(i, j int) bool {
+func (s sortRunesCaseSensitiveImpl) Less(i, j int) bool {
 	return s[i] < s[j]
 }
 
 // Swap swaps the elements with indexes i and j.
-func (s sortRunes) Swap(i, j int) {
+func (s sortRunesCaseSensitiveImpl) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
-// caseInsensitiveSortedRunes represents a case-insensitive version of
-// `sortRunes` for the purpose of sorting.
-type caseInsensitiveSortedRunes struct {
-	sortRunes
+// sortRunesCaseInsensitive returns a [sort.Interface] for sorting a slice of
+// runes.
+func sortRunesCaseInsensitive(runes []rune) sortRunesCaseInsensitiveImpl {
+	lowercased := make([]rune, len(runes))
+	for i, r := range runes {
+		lowercased[i] = unicode.ToLower(r)
+	}
+	return sortRunesCaseInsensitiveImpl{runes: runes, lowercased: lowercased}
+}
+
+// sortRunes implements [sort.Interface] for sorting a slice of runes.
+type sortRunesCaseInsensitiveImpl struct {
+	runes      []rune
+	lowercased []rune
+}
+
+// Len is the number of elements in the collection.
+func (s sortRunesCaseInsensitiveImpl) Len() int {
+	return len(s.runes)
 }
 
 // Less reports whether the element with index i must sort before the element
 // with index j.
-func (ci caseInsensitiveSortedRunes) Less(i, j int) bool {
-	return strings.ToLower(string(ci.sortRunes[i])) < strings.ToLower(string(ci.sortRunes[j]))
+func (s sortRunesCaseInsensitiveImpl) Less(i, j int) bool {
+	return s.lowercased[i] < s.lowercased[j]
 }
 
-// caseInsensitiveValueList represents a case-insensitive version of
-// [ValuesList] for the purpose of sorting.
-type caseInsensitiveValueList struct {
-	ValuesList
+// Swap swaps the elements with indexes i and j.
+func (s sortRunesCaseInsensitiveImpl) Swap(i, j int) {
+	s.runes[i], s.runes[j] = s.runes[j], s.runes[i]
+	s.lowercased[i], s.lowercased[j] = s.lowercased[j], s.lowercased[i]
+}
+
+// sortValuesList  returns a [sort.Interface] for sorting a [ValuesList].
+func sortValuesList(data ValuesList, caseSensitive bool) sort.Interface {
+	return sortValuesListImpl{valuesList: data, caseSensitive: caseSensitive}
+}
+
+// sortValuesListImpl implements [sort.Interface] for sorting a [ValuesList].
+type sortValuesListImpl struct {
+	valuesList    ValuesList
+	caseSensitive bool
+}
+
+// Len is the number of elements in the collection.
+func (ci sortValuesListImpl) Len() int {
+	return len(ci.valuesList)
 }
 
 // Less reports whether the element with index i must sort before the element
 // with index j.
-func (ci caseInsensitiveValueList) Less(i, j int) bool {
-	vi := ci.ValuesList[i]
-	vj := ci.ValuesList[j]
+func (ci sortValuesListImpl) Less(i, j int) bool {
+	vi := ci.valuesList[i]
+	vj := ci.valuesList[j]
 	switch {
 	case vi.IsInteger() && vj.IsInteger():
 		return vi.Integer() < vj.Integer()
 	case vi.IsFloat() && vj.IsFloat():
 		return vi.Float() < vj.Float()
 	default:
-		return strings.ToLower(vi.String()) < strings.ToLower(vj.String())
+		a := vi.String()
+		b := vj.String()
+		if ci.caseSensitive {
+			return a < b
+		}
+		return stringLessCaseInsensitive(a, b)
 	}
 }
 
-// caseInsensitive returns the the data sorted in a case insensitive way (if
-// string).
-func caseInsensitive(data sort.Interface) sort.Interface {
-	if vl, ok := data.(ValuesList); ok {
-		return &caseInsensitiveValueList{vl}
-	} else if sr, ok := data.(sortRunes); ok {
-		return &caseInsensitiveSortedRunes{sr}
-	}
-	return data
+// Swap swaps the elements with indexes i and j.
+func (ci sortValuesListImpl) Swap(i, j int) {
+	ci.valuesList[i], ci.valuesList[j] = ci.valuesList[j], ci.valuesList[i]
 }

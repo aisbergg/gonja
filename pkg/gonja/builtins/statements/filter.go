@@ -17,11 +17,14 @@ type FilterStmt struct {
 	filterChain []*parse.FilterCall
 }
 
-var _ parse.Statement = (*FilterStmt)(nil)
-var _ exec.Statement = (*FilterStmt)(nil)
+var (
+	_ parse.Statement = (*FilterStmt)(nil)
+	_ exec.Statement  = (*FilterStmt)(nil)
+)
 
 // Position returns the token position of the statement.
 func (stmt *FilterStmt) Position() *parse.Token { return stmt.position }
+
 func (stmt *FilterStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("FilterStmt(Line=%d Col=%d)", t.Line, t.Col)
@@ -39,14 +42,14 @@ func (stmt *FilterStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode)
 		panic(err)
 	}
 
-	value := r.ValueVactory.NewValue(out.String(), false)
+	value := r.ValueFactory.Value(out.String())
 	for _, call := range stmt.filterChain {
 		value = r.Evaluator().ExecuteFilter(call, value)
 	}
 	r.WriteString(value.String())
 }
 
-func filterParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func filterParser(p, args *parse.Parser) parse.Statement {
 	stmt := &FilterStmt{
 		position: p.Current(),
 	}

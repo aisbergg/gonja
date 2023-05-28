@@ -44,7 +44,13 @@ type TemplateNode struct {
 }
 
 // Position returns the start token of the Node.
-func (tpl *TemplateNode) Position() *Token { return tpl.Nodes[0].Position() }
+func (tpl *TemplateNode) Position() *Token {
+	if len(tpl.Nodes) == 0 {
+		return &Token{Type: TokenEOF, Line: 0, Col: 0}
+	}
+	return tpl.Nodes[0].Position()
+}
+
 func (tpl *TemplateNode) String() string {
 	tok := tpl.Position()
 	return fmt.Sprintf("Template(Name=%s Line=%d Col=%d)", tpl.Name, tok.Line, tok.Col)
@@ -52,7 +58,7 @@ func (tpl *TemplateNode) String() string {
 
 // GetBlocks returns the blocks with the given name.
 func (tpl *TemplateNode) GetBlocks(name string) []*WrapperNode {
-	// need to render full template to populate context
+	// XXX: need to render full template to populate context
 
 	var blocks []*WrapperNode
 	if tpl.Parent != nil {
@@ -113,6 +119,7 @@ type OutputNode struct {
 
 // Position returns the start token of the Node.
 func (o *OutputNode) Position() *Token { return o.Start }
+
 func (o *OutputNode) String() string {
 	return fmt.Sprintf("Output(Expression=%s Line=%d Col=%d)",
 		o.Expression, o.Start.Line, o.End.Col)
@@ -126,6 +133,7 @@ type FilteredExpression struct {
 func (expr *FilteredExpression) Position() *Token {
 	return expr.Expression.Position()
 }
+
 func (expr *FilteredExpression) String() string {
 	t := expr.Expression.Position()
 
@@ -152,6 +160,7 @@ func (expr *TestExpression) String() string {
 	return fmt.Sprintf("TestExpression(Expression=%s Test=%s Line=%d Col=%d)",
 		expr.Expression, expr.Test, t.Line, t.Col)
 }
+
 func (expr *TestExpression) Position() *Token {
 	return expr.Expression.Position()
 }
@@ -222,6 +231,7 @@ type NameNode struct {
 
 // Position returns the start token of the Node.
 func (n *NameNode) Position() *Token { return n.Name }
+
 func (n *NameNode) String() string {
 	t := n.Position()
 	return fmt.Sprintf("Name(Val=%s Line=%d Col=%d)", t.Val, t.Line, t.Col)
@@ -273,6 +283,7 @@ type PairNode struct {
 
 // Position returns the start token of the Node.
 func (p *PairNode) Position() *Token { return p.Key.Position() }
+
 func (p *PairNode) String() string {
 	t := p.Position()
 	return fmt.Sprintf("Pair(Key=%s Value=%s Line=%d Col=%d)", p.Key, p.Value, t.Line, t.Col)
@@ -290,6 +301,7 @@ type CallNode struct {
 
 // Position returns the start token of the Node.
 func (c *CallNode) Position() *Token { return c.Location }
+
 func (c *CallNode) String() string {
 	t := c.Position()
 	return fmt.Sprintf("Call(Args=%s Kwargs=%s Line=%d Col=%d)", c.Args, c.Kwargs, t.Line, t.Col)
@@ -308,6 +320,7 @@ type GetItemNode struct {
 
 // Position returns the start token of the Node.
 func (g *GetItemNode) Position() *Token { return g.Location }
+
 func (g *GetItemNode) String() string {
 	t := g.Position()
 	var param string
@@ -329,6 +342,7 @@ type NegationNode struct {
 
 // Position returns the start token of the Node.
 func (n *NegationNode) Position() *Token { return n.Operator }
+
 func (n *NegationNode) String() string {
 	t := n.Operator
 	return fmt.Sprintf("Negation(term=%s Line=%d Col=%d)", n.Term, t.Line, t.Col)
@@ -345,6 +359,7 @@ type UnaryExpressionNode struct {
 
 // Position returns the start token of the Node.
 func (ue *UnaryExpressionNode) Position() *Token { return ue.Location }
+
 func (ue *UnaryExpressionNode) String() string {
 	t := ue.Location
 	return fmt.Sprintf("UnaryExpression(sign=%s term=%s Line=%d Col=%d)",
@@ -362,6 +377,7 @@ type BinaryExpressionNode struct {
 
 // Position returns the start token of the Node.
 func (be *BinaryExpressionNode) Position() *Token { return be.Left.Position() }
+
 func (be *BinaryExpressionNode) String() string {
 	t := be.Position()
 	return fmt.Sprintf("BinaryExpression(operator=%s left=%s right=%s Line=%d Col=%d)", be.Operator.Token.Val, be.Left, be.Right, t.Line, t.Col)
@@ -433,6 +449,24 @@ func (bo BinOperatorNode) String() string   { return bo.Token.String() }
 
 // -----------------------------------------------------------------------------
 
+// InlineIfExpressionNode represents an inline if expression node `{{ foo if foo is defined else bar }}`.
+type InlineIfExpressionNode struct {
+	Location  *Token
+	Condition Expression
+	TrueExpr  Expression
+	FalseExpr Expression
+}
+
+// Position returns the start token of the Node.
+func (ii InlineIfExpressionNode) Position() *Token { return ii.Location }
+
+func (ii InlineIfExpressionNode) String() string {
+	t := ii.Position()
+	return fmt.Sprintf("InlineIfExpression(Condition=%s TrueExpr=%s FalseExpr=%s Line=%d Col=%d)", ii.Condition, ii.TrueExpr, ii.FalseExpr, t.Line, t.Col)
+}
+
+// -----------------------------------------------------------------------------
+
 // StatementBlockNode represents a statement block node `{% 1; 2; 3 %}`.
 type StatementBlockNode struct {
 	Location *Token
@@ -444,6 +478,7 @@ type StatementBlockNode struct {
 
 // Position returns the start token of the Node.
 func (sb StatementBlockNode) Position() *Token { return sb.Location }
+
 func (sb StatementBlockNode) String() string {
 	t := sb.Position()
 	return fmt.Sprintf("StatementBlock(Name=%s Impl=%s Line=%d Col=%d)",
@@ -463,6 +498,7 @@ type WrapperNode struct {
 
 // Position returns the start token of the Node.
 func (w WrapperNode) Position() *Token { return w.Location }
+
 func (w WrapperNode) String() string {
 	t := w.Position()
 	return fmt.Sprintf("Wrapper(Nodes=%s EndTag=%s Line=%d Col=%d)",
@@ -482,6 +518,7 @@ type MacroNode struct {
 
 // Position returns the start token of the Node.
 func (m *MacroNode) Position() *Token { return m.Location }
+
 func (m *MacroNode) String() string {
 	t := m.Position()
 	return fmt.Sprintf("Macro(Name=%s Args=%s Kwargs=%s Line=%d Col=%d)", m.Name, m.Args, m.Kwargs, t.Line, t.Col)

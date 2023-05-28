@@ -1,6 +1,8 @@
 package gonja
 
 import (
+	"path/filepath"
+
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 	"github.com/aisbergg/gonja/pkg/gonja/loaders"
 )
@@ -10,7 +12,7 @@ var (
 	// rendering. It uses the NullLoader, which means that you can't use
 	// `include` or `extends` to load other templates.
 	DefaultEnv       = NewEnvironment()
-	fileSystemLoader = loaders.MustNewFileSystemLoader("")
+	fileSystemLoader = loaders.MustNewFileSystemLoader("/")
 
 	// FromString is a quick way to parse a template from a string. The template
 	// doesn't allow any includes. If you want to use includes, create a custom
@@ -26,6 +28,10 @@ var (
 // allow any includes. If you want to use includes, create a custom environment
 // with an appropriate loader.
 func FromFile(path string) (*exec.Template, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
 	return fileSystemLoader.Load(path, DefaultEnv.EvalConfig)
 }
 

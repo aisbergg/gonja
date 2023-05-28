@@ -2,6 +2,7 @@ package parse
 
 import (
 	debug "github.com/aisbergg/gonja/internal/debug/parse"
+	"github.com/aisbergg/gonja/pkg/gonja/errors"
 )
 
 func (p *Parser) ParseTest(expr Expression) Expression {
@@ -11,12 +12,14 @@ func (p *Parser) ParseTest(expr Expression) Expression {
 	}
 	debug.Print("parse: %s", p.Current())
 
+	current := p.Current()
+	line := current.Line
+	_ = line
 	expr = p.ParseFilterExpression(expr)
 
 	if p.MatchName("is") != nil {
 		not := p.MatchName("not")
 		ident := p.Next()
-
 		test := &TestCall{
 			Token:  ident,
 			Name:   ident.Val,
@@ -24,41 +27,34 @@ func (p *Parser) ParseTest(expr Expression) Expression {
 			Kwargs: map[string]Expression{},
 		}
 
-		arg := p.ParseExpression()
-		if arg != nil {
-			test.Args = append(test.Args, arg)
+		if ident.Val == "in" {
+			// requires an expression as an argument
+			test.Args = append(test.Args, p.ParseExpression())
+
+		} else if p.Match(TokenLparen) != nil {
+			// one or more args can be passed with parentheses, e.g.: {% if 9 is divisibleby(3) %}
+			noMoreArgs := false
+			for p.Match(TokenComma) != nil || p.Match(TokenRparen) == nil {
+				// parse args and kwargs
+				v := p.ParseExpression()
+				if p.Match(TokenAssign) != nil {
+					key := v.Position().Val
+					test.Kwargs[key] = p.ParseExpression()
+					noMoreArgs = true
+				} else {
+					if noMoreArgs {
+						errors.ThrowSyntaxError(p.Current().ErrorToken(), "positional argument must be before keyword argument")
+					}
+					test.Args = append(test.Args, v)
+				}
+			}
+
+		} else if p.Peek(TokenEOF, TokenBlockEnd, TokenVariableEnd, TokenRawEnd) == nil {
+			// one arg can be passed without parentheses, e.g.: {% if 9 is divisibleby 3 %}
+			if arg := p.ParseOptionalExpression(); arg != nil {
+				test.Args = append(test.Args, arg)
+			}
 		}
-
-		// // Check for test-argument (2 tokens needed: ':' ARG)
-		// if p.Match(tokens.Lparen) != nil {
-		// 	if p.Peek(tokens.VariableEnd) != nil {
-		// 		return nil, p.Error("Filter parameter required after '('.", nil)
-		// 	}
-
-		// 	for p.Match(tokens.Comma) != nil || p.Match(tokens.Rparen) == nil {
-		// 		// TODO: Handle multiple args and kwargs
-		// 		v:= p.ParseExpression()
-		// 		if err != nil {
-		// 			return nil, err
-		// 		}
-
-		// 		if p.Match(tokens.Assign) != nil {
-		// 			key := v.Position().Val
-		// 			value, errValue := p.ParseExpression()
-		// 			if errValue != nil {
-		// 				return nil, errValue
-		// 			}
-		// 			test.Kwargs[key] = value
-		// 		} else {
-		// 			test.Args = append(test.Args, v)
-		// 		}
-		// 	}
-		// } else {
-		// 	arg:= p.ParseExpression()
-		// 	if err == nil && arg != nil {
-		// 		test.Args = append(test.Args, arg)
-		// 	}
-		// }
 
 		expr = &TestExpression{
 			Expression: expr,

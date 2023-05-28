@@ -18,13 +18,17 @@ type Context struct {
 func NewContext(data map[string]any, userData any, valueFactory *ValueFactory) *Context {
 	return &Context{
 		data:         data,
-		userData:     valueFactory.NewValue(userData, false),
+		userData:     valueFactory.Value(userData),
 		valueFactory: valueFactory,
 	}
 }
 
-func EmptyContext() *Context {
-	return &Context{data: map[string]any{}}
+func NewEmptyContext(valueFactory *ValueFactory) *Context {
+	return &Context{
+		data:         map[string]any{},
+		userData:     nil,
+		valueFactory: valueFactory,
+	}
 }
 
 // // setResolver sets the resolver for this context.
@@ -34,7 +38,7 @@ func EmptyContext() *Context {
 
 // // setUserData sets the user data for this context.
 // func (ctx *Context) setUserData(userData any) {
-// 	ctx.userData = ctx.valueFactory.NewValue(userData, false)
+// 	ctx.userData = ctx.valueFactory.Value(userData)
 // }
 
 func (ctx *Context) Get(name string) Value {
@@ -46,7 +50,7 @@ func (ctx *Context) Get(name string) Value {
 
 	value, exists := ctx.data[name]
 	if exists {
-		return ctx.valueFactory.NewValue(value, false)
+		return ctx.valueFactory.Value(value)
 	} else if ctx.parent != nil {
 		return ctx.parent.Get(name)
 	} else if ctx.userData != nil {
@@ -60,7 +64,9 @@ func (ctx *Context) Get(name string) Value {
 		return item
 	}
 
-	return nil
+	undefined := ctx.valueFactory.NewUndefined(name, fmt.Sprintf("'%s' not found in context", name))
+	ctx.data[name] = undefined
+	return undefined
 }
 
 func (ctx *Context) Set(name string, value any) {

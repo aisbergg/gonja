@@ -16,12 +16,12 @@ func failsafe(t *testing.T) {
 func TestVarArgs(t *testing.T) {
 	t.Run("first", testVAFirst)
 	t.Run("GetKwarg", testVAGetKwarg)
-	t.Run("Expect", testVAExpect)
+	t.Run("expect", testVAExpect)
 }
 
 func testVAFirst(t *testing.T) {
 	t.Run("nil if empty", func(t *testing.T) {
-		defer failsafe(t)
+		// defer failsafe(t)
 		assert := testutils.NewAssert(t)
 
 		va := exec.VarArgs{}
@@ -29,10 +29,10 @@ func testVAFirst(t *testing.T) {
 		assert.True(first.IsNil())
 	})
 	t.Run("first value", func(t *testing.T) {
-		defer failsafe(t)
+		// defer failsafe(t)
 		assert := testutils.NewAssert(t)
 
-		va := exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42)}}
+		va := exec.VarArgs{Args: []exec.Value{testutils.NewValue(42)}}
 		first := va.First()
 		assert.Equal(42, first.Integer())
 	})
@@ -40,22 +40,23 @@ func testVAFirst(t *testing.T) {
 
 func testVAGetKwarg(t *testing.T) {
 	t.Run("value if found", func(t *testing.T) {
-		defer failsafe(t)
+		// defer failsafe(t)
 		assert := testutils.NewAssert(t)
 
 		va := exec.VarArgs{Kwargs: []exec.KVPair{
-			{"key", exec.AsValue(42)},
+			{"key", testutils.NewValue(42)},
 		}}
-		kwarg := va.GetKwarg("key", "not found")
+		kwarg := va.GetKwarg("key")
 		assert.Equal(42, kwarg.Integer())
 	})
 	t.Run("defaut if missing", func(t *testing.T) {
-		defer failsafe(t)
+		// defer failsafe(t)
 		assert := testutils.NewAssert(t)
 
 		va := exec.VarArgs{}
-		kwarg := va.GetKwarg("missing", "not found")
-		assert.Equal("not found", kwarg.String())
+		assert.Panic(func() {
+			va.GetKwarg("missing")
+		})
 	})
 }
 
@@ -64,36 +65,30 @@ var nothingCases = []struct {
 	va    *exec.VarArgs
 	error string
 }{
-	{"got nothing", &exec.VarArgs{}, ""}, {
+	{
+		"got nothing",
+		testutils.NewVarArgs(nil, nil),
+		"",
+	}, {
 		"got an argument",
-		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42)}},
-		`Unexpected argument '42'`,
+		testutils.NewVarArgs([]exec.Value{testutils.NewValue(42)}, nil),
+		"expected no arguments, got 1",
 	}, {
 		"got multiples arguments",
-		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(7)}},
-		`Unexpected arguments '42, 7'`,
+		testutils.NewVarArgs([]exec.Value{testutils.NewValue(42), testutils.NewValue(7)}, nil),
+		"expected no arguments, got 2",
 	}, {
 		"got a keyword argument",
-		&exec.VarArgs{Kwargs: []exec.KVPair{
-			{"key", exec.AsValue(42)},
-		}},
-		`Unexpected keyword argument 'key=42'`,
+		testutils.NewVarArgs(nil, []exec.KVPair{{"key", testutils.NewValue(42)}}),
+		"expected no arguments, got 1",
 	}, {
 		"got multiple keyword arguments",
-		&exec.VarArgs{Kwargs: []exec.KVPair{
-			{"key", exec.AsValue(42)},
-			{"other", exec.AsValue(7)},
-		}},
-		`unexpected keyword arguments 'key=42, other=7'`,
+		testutils.NewVarArgs(nil, []exec.KVPair{{"key", testutils.NewValue(42)}, {"other", testutils.NewValue(7)}}),
+		"expected no arguments, got 2",
 	}, {
 		"got one of each",
-		&exec.VarArgs{
-			Args: []*exec.GenericValue{exec.AsValue(42)},
-			Kwargs: []exec.KVPair{
-				{"key", exec.AsValue(42)},
-			},
-		},
-		`unexpected arguments '42, key=42'`,
+		testutils.NewVarArgs([]exec.Value{testutils.NewValue(42)}, []exec.KVPair{{"key", testutils.NewValue(42)}}),
+		"expected no arguments, got 2",
 	},
 }
 
@@ -105,29 +100,36 @@ var argsCases = []struct {
 }{
 	{
 		"got expected",
-		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(7)}},
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42), testutils.NewValue(7)},
+			nil,
+		),
 		2, "",
 	}, {
 		"got less arguments",
-		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42)}},
-		2, `Expected 2 arguments, got 1`,
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42)},
+			nil,
+		),
+		2, "expected 2 arguments, got 1",
 	}, {
 		"got less arguments (singular)",
-		&exec.VarArgs{},
-		1, `Expected an argument, got 0`,
+		testutils.NewVarArgs(nil, nil),
+		1, "expected an argument, got 0",
 	}, {
 		"got more arguments",
-		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(7)}},
-		1, `Unexpected argument '7'`,
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42), testutils.NewValue(7)},
+			nil,
+		),
+		1, "unexpected argument '7'",
 	}, {
 		"got a keyword argument",
-		&exec.VarArgs{
-			Args: []*exec.GenericValue{exec.AsValue(42)},
-			Kwargs: []exec.KVPair{
-				{"key", exec.AsValue(42)},
-			},
-		},
-		1, `Unexpected keyword argument 'key=42'`,
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42)},
+			[]exec.KVPair{{"key", testutils.NewValue(42)}},
+		),
+		1, "unexpected keyword argument 'key=42'",
 	},
 }
 
@@ -139,10 +141,10 @@ var kwargsCases = []struct {
 }{
 	{
 		"got expected",
-		&exec.VarArgs{Kwargs: []exec.KVPair{
-			{"key", exec.AsValue(42)},
-			{"other", exec.AsValue(7)},
-		}},
+		testutils.NewVarArgs(
+			nil,
+			[]exec.KVPair{{"key", testutils.NewValue(42)}, {"other", testutils.NewValue(7)}},
+		),
 		[]*exec.Kwarg{
 			{"key", "default key"},
 			{"other", "default other"},
@@ -150,33 +152,40 @@ var kwargsCases = []struct {
 		"",
 	}, {
 		"got unexpected arguments",
-		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(7), exec.AsValue("unexpected")}},
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42), testutils.NewValue(7), testutils.NewValue("unexpected")},
+			nil,
+		),
 		[]*exec.Kwarg{
 			{"key", "default key"},
 			{"other", "default other"},
 		},
-		`Unexpected argument 'unexpected'`,
+		"unexpected argument 'unexpected'",
 	}, {
 		"got an unexpected keyword argument",
-		&exec.VarArgs{Kwargs: []exec.KVPair{
-			{"key", exec.AsValue(42)},
-		}},
+		testutils.NewVarArgs(
+			nil,
+			[]exec.KVPair{{"unknown", testutils.NewValue(42)}},
+		),
 		[]*exec.Kwarg{
 			{"key", "default key"},
 			{"other", "default other"},
 		},
-		`Unexpected keyword argument 'unknown=42'`,
+		"unexpected keyword argument 'unknown=42'",
 	}, {
 		"got multiple keyword arguments",
-		&exec.VarArgs{Kwargs: []exec.KVPair{
-			{"unknown", exec.AsValue(42)},
-			{"seven", exec.AsValue(7)},
-		}},
+		testutils.NewVarArgs(
+			nil,
+			[]exec.KVPair{
+				{"unknown", testutils.NewValue(42)},
+				{"seven", testutils.NewValue(7)},
+			},
+		),
 		[]*exec.Kwarg{
 			{"key", "default key"},
 			{"other", "default other"},
 		},
-		`Unexpected keyword arguments 'seven=7, unknown=42'`,
+		"unexpected keyword arguments 'seven=7, unknown=42'",
 	},
 }
 
@@ -190,88 +199,91 @@ var mixedArgsKwargsCases = []struct {
 }{
 	{
 		"got expected",
-		&exec.VarArgs{
-			Args: []*exec.GenericValue{exec.AsValue(42)},
-			Kwargs: []exec.KVPair{
-				{"key", exec.AsValue(42)},
-				{"other", exec.AsValue(7)},
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42)},
+			[]exec.KVPair{
+				{"key", testutils.NewValue(42)},
+				{"other", testutils.NewValue(7)},
 			},
-		},
+		),
 		1,
 		[]*exec.Kwarg{
 			{"key", "default key"},
 			{"other", "default other"},
 		},
-		&exec.VarArgs{
-			Args: []*exec.GenericValue{exec.AsValue(42)},
-			Kwargs: []exec.KVPair{
-				{"key", exec.AsValue(42)},
-				{"other", exec.AsValue(7)},
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42)},
+			[]exec.KVPair{
+				{"key", testutils.NewValue(42)},
+				{"other", testutils.NewValue(7)},
 			},
-		},
+		),
 		"",
 	},
 	{
 		"fill with default",
-		&exec.VarArgs{Args: []*exec.GenericValue{exec.AsValue(42)}},
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42)},
+			nil,
+		),
 		1,
 		[]*exec.Kwarg{
 			{"key", "default key"},
 			{"other", "default other"},
 		},
-		&exec.VarArgs{
-			Args: []*exec.GenericValue{exec.AsValue(42)},
-			Kwargs: []exec.KVPair{
-				{"key", exec.AsValue("default key")},
-				{"other", exec.AsValue("default other")},
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42)},
+			[]exec.KVPair{
+				{"key", testutils.NewValue("default key")},
+				{"other", testutils.NewValue("default other")},
 			},
-		},
+		),
 		"",
 	},
 	{
 		"keyword as argument",
-		&exec.VarArgs{
-			Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(42)},
-			Kwargs: []exec.KVPair{
-				{"other", exec.AsValue(7)},
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42), testutils.NewValue(42)},
+			[]exec.KVPair{
+				{"other", testutils.NewValue(7)},
 			},
-		},
+		),
 		1,
 		[]*exec.Kwarg{
 			{"key", "default key"},
 			{"other", "default other"},
 		},
-		&exec.VarArgs{
-			Args: []*exec.GenericValue{exec.AsValue(42)},
-			Kwargs: []exec.KVPair{
-				{"key", exec.AsValue(42)},
-				{"other", exec.AsValue(7)},
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42)},
+			[]exec.KVPair{
+				{"key", testutils.NewValue(42)},
+				{"other", testutils.NewValue(7)},
 			},
-		},
+		),
 		"",
 	},
 	{
 		"keyword submitted twice",
-		&exec.VarArgs{
-			Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(5)},
-			Kwargs: []exec.KVPair{
-				{"key", exec.AsValue(42)},
-				{"other", exec.AsValue(7)},
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42), testutils.NewValue(5)},
+			[]exec.KVPair{
+				{"key", testutils.NewValue(42)},
+				{"other", testutils.NewValue(7)},
 			},
-		},
+		),
 		1,
 		[]*exec.Kwarg{
 			{"key", "default key"},
 			{"other", "default other"},
 		},
-		&exec.VarArgs{
-			Args: []*exec.GenericValue{exec.AsValue(42), exec.AsValue(5)},
-			Kwargs: []exec.KVPair{
-				{"key", exec.AsValue(42)},
-				{"other", exec.AsValue(7)},
+		testutils.NewVarArgs(
+			[]exec.Value{testutils.NewValue(42), testutils.NewValue(5)},
+			[]exec.KVPair{
+				{"key", testutils.NewValue(42)},
+				{"other", testutils.NewValue(7)},
 			},
-		},
-		`got multiple values for argument 'key'`,
+		),
+		"got multiple values for argument 'key'",
 	},
 }
 
@@ -291,7 +303,7 @@ func testVAExpect(t *testing.T) {
 		for _, tc := range nothingCases {
 			test := tc
 			t.Run(test.name, func(t *testing.T) {
-				defer failsafe(t)
+				// defer failsafe(t)
 				rva := test.va.ExpectNothing()
 				assertError(t, rva, test.error)
 			})
@@ -301,7 +313,7 @@ func testVAExpect(t *testing.T) {
 		for _, tc := range argsCases {
 			test := tc
 			t.Run(test.name, func(t *testing.T) {
-				defer failsafe(t)
+				// defer failsafe(t)
 				rva := test.va.ExpectArgs(test.args)
 				assertError(t, rva, test.error)
 			})
@@ -311,17 +323,17 @@ func testVAExpect(t *testing.T) {
 		for _, tc := range kwargsCases {
 			test := tc
 			t.Run(test.name, func(t *testing.T) {
-				defer failsafe(t)
+				// defer failsafe(t)
 				rva := test.va.Expect(0, test.kwargs)
 				assertError(t, rva, test.error)
 			})
 		}
 	})
-	t.Run("mixed argmuents", func(t *testing.T) {
+	t.Run("mixed arguments", func(t *testing.T) {
 		for _, tc := range mixedArgsKwargsCases {
 			test := tc
 			t.Run(test.name, func(t *testing.T) {
-				defer failsafe(t)
+				// defer failsafe(t)
 				assert := testutils.NewAssert(t)
 				rva := test.va.Expect(test.args, test.kwargs)
 				assertError(t, rva, test.error)
@@ -329,7 +341,7 @@ func testVAExpect(t *testing.T) {
 					for idx, expected := range test.expected.Args {
 						arg := rva.Args[idx]
 						assert.Equal(expected.Interface(), arg.Interface(),
-							`Argument %d mismatch: expected '%s' got '%s'`,
+							"Argument %d mismatch: expected '%s' got '%s'",
 							idx, expected.String(), arg.String(),
 						)
 					}
@@ -338,9 +350,9 @@ func testVAExpect(t *testing.T) {
 					for _, expectedKV := range test.expected.Kwargs {
 						expKey, expValue := expectedKV.Key, expectedKV.Value
 						if assert.True(rva.HasKwarg(expKey)) {
-							value := rva.GetKwarg(expKey, nil)
+							value := rva.GetKwarg(expKey)
 							assert.Equal(expValue.Interface(), value.Interface(),
-								`Keyword argument %s mismatch: expected '%s' got '%s'`,
+								"Keyword argument %s mismatch: expected '%s' got '%s'",
 								expKey, expValue.String(), value.String(),
 							)
 						}

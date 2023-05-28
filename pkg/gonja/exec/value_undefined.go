@@ -25,7 +25,7 @@ type Undefined interface {
 }
 
 // UndefinedFunc is a function that creates a new Undefined value.
-type UndefinedFunc func(name string, hintFormat string, args ...any) Undefined
+type UndefinedFunc func(name, hintFormat string, args ...any) Undefined
 
 // undefinedType represents the reflect.Type of Undefined.
 var undefinedType = reflect.TypeOf((*Undefined)(nil)).Elem()
@@ -81,54 +81,67 @@ func (u UndefinedValue) Hint() string {
 func (*UndefinedValue) String() string {
 	return ""
 }
+
 func (*UndefinedValue) Escaped() string {
 	return ""
 }
+
 func (u UndefinedValue) Integer() int {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return 0
 }
+
 func (u UndefinedValue) Float() float64 {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return 0.0
 }
+
 func (u UndefinedValue) Bool() bool {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return false
 }
+
 func (*UndefinedValue) Len() int {
 	return 0
 }
+
 func (u UndefinedValue) Slice(i, j int) Value {
-	return u.valueFactory.NewValue("", false)
+	return u.valueFactory.Value("")
 }
+
 func (u UndefinedValue) Index(i int) Value {
-	return u.valueFactory.NewValue("", false)
+	return u.valueFactory.Value("")
 }
+
 func (u *UndefinedValue) EqualValueTo(other Value) bool {
 	return false
 }
+
 func (u *UndefinedValue) Keys() ValuesList {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return ValuesList{}
 }
+
 func (u *UndefinedValue) Values() ValuesList {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return ValuesList{}
 }
+
 func (u *UndefinedValue) Items() []*Pair {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return []*Pair{}
 }
+
 func (u UndefinedValue) GetItem(key any) Value {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return nil
 }
+
 func (u UndefinedValue) Set(key string, value interface{}) {
 	errors.ThrowUndefinedError(u.name, u.hint)
 }
 func (*UndefinedValue) Iterate(fn func(idx, count int, key, value Value) bool, empty func()) {}
-func (*UndefinedValue) IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
+func (*UndefinedValue) IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse, sorted, caseSensitive bool) {
 }
 
 // -----------------------------------------------------------------------------
@@ -146,7 +159,7 @@ type StrictUndefinedValue struct {
 }
 
 // NewStrictUndefinedValue creates a new StrictUndefinedValue.
-func NewStrictUndefinedValue(varName string, format string, args ...any) Undefined {
+func NewStrictUndefinedValue(varName, format string, args ...any) Undefined {
 	hint := ""
 	if format != "" {
 		hint = fmt.Sprintf(format, args...)
@@ -163,24 +176,25 @@ func (u *StrictUndefinedValue) String() string {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return ""
 }
-func (u *StrictUndefinedValue) IsTrue() bool {
-	errors.ThrowUndefinedError(u.name, u.hint)
-	return false
-}
+
 func (u *StrictUndefinedValue) Len() int {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return 0
 }
+
 func (u *StrictUndefinedValue) Contains(other Value) bool {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return false
 }
+
 func (u *StrictUndefinedValue) Iterate(fn func(idx, count int, key, value Value) bool, empty func()) {
 	errors.ThrowUndefinedError(u.name, u.hint)
 }
-func (u *StrictUndefinedValue) IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
+
+func (u *StrictUndefinedValue) IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse, sorted, caseSensitive bool) {
 	errors.ThrowUndefinedError(u.name, u.hint)
 }
+
 func (u *StrictUndefinedValue) EqualValueTo(other Value) bool {
 	errors.ThrowUndefinedError(u.name, u.hint)
 	return false
@@ -202,7 +216,7 @@ type ChainedUndefinedValue struct {
 }
 
 // NewChainedUndefinedValue creates a new ChainedUndefinedValue.
-func NewChainedUndefinedValue(varName string, format string, args ...any) Undefined {
+func NewChainedUndefinedValue(varName, format string, args ...any) Undefined {
 	hint := ""
 	if format != "" {
 		hint = fmt.Sprintf(format, args...)
@@ -235,7 +249,7 @@ type ChainedStrictUndefinedValue struct {
 }
 
 // NewChainedStrictUndefinedValue creates a new ChainedStrictUndefinedValue.
-func NewChainedStrictUndefinedValue(varName string, format string, args ...any) Undefined {
+func NewChainedStrictUndefinedValue(varName, format string, args ...any) Undefined {
 	hint := ""
 	if format != "" {
 		hint = fmt.Sprintf(format, args...)

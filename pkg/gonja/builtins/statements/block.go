@@ -14,8 +14,10 @@ type BlockStmt struct {
 	Name     string
 }
 
-var _ parse.Statement = (*BlockStmt)(nil)
-var _ exec.Statement = (*BlockStmt)(nil)
+var (
+	_ parse.Statement = (*BlockStmt)(nil)
+	_ exec.Statement  = (*BlockStmt)(nil)
+)
 
 func (stmt *BlockStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *BlockStmt) String() string {
@@ -75,7 +77,7 @@ func (bi *BlockInfos) super() string {
 	return out.String()
 }
 
-func blockParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func blockParser(p, args *parse.Parser) parse.Statement {
 	block := &BlockStmt{
 		Location: p.Current(),
 	}

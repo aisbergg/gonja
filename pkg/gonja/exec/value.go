@@ -9,8 +9,9 @@ import (
 )
 
 var (
-	rtValue = reflect.TypeOf((*Value)(nil)).Elem()
-	rtDict  = reflect.TypeOf(Dict{})
+	rtValue      = reflect.TypeOf((*Value)(nil)).Elem()
+	rtValuesList = reflect.TypeOf((ValuesList)(nil))
+	rtDict       = reflect.TypeOf((*Dict)(nil))
 )
 
 func indirectReflectValue(val reflect.Value) reflect.Value {
@@ -53,9 +54,6 @@ type Value interface {
 
 	// IsNil returns true if the value is nil or null, false otherwise.
 	IsNil() bool
-
-	// IsTrue returns true if the value is true, false otherwise.
-	IsTrue() bool
 
 	// IsSafe returns true if the value is safe for concurrent use, false
 	// otherwise.
@@ -124,7 +122,7 @@ type Value interface {
 	// Iterate iterates over the value's items, if it's a list or dictionary,
 	// and calls the provided function for each item. If the value is empty, the
 	// empty function is called instead.
-	Iterate(fn func(idx, count int, key, value Value) bool, empty func())
+	Iterate(fn func(idx, count int, key, value Value) (cont bool), empty func())
 
 	// IterateOrder iterates over the value's items, if it's a dictionary, in a
 	// specified order, and calls the provided function for each item. If the
@@ -132,7 +130,7 @@ type Value interface {
 	// the items are iterated in reverse order. If sorted is true, the items are
 	// sorted by key. If caseSensitive is true, the keys are compared
 	// case-sensitively.
-	IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool)
+	IterateOrder(fn func(idx, count int, key, value Value) (cont bool), empty func(), reverse, sorted, caseSensitive bool)
 
 	// EqualValueTo returns true if the value is equal to the other value, false
 	// otherwise.
@@ -171,111 +169,138 @@ func NewBaseValue(valueFactory *ValueFactory, isSafe bool) *BaseValue {
 func (*BaseValue) IsString() bool {
 	return false
 }
+
 func (*BaseValue) IsBool() bool {
 	return false
 }
+
 func (*BaseValue) IsFloat() bool {
 	return false
 }
+
 func (*BaseValue) IsInteger() bool {
 	return false
 }
+
 func (*BaseValue) IsNumber() bool {
 	return false
 }
+
 func (*BaseValue) IsList() bool {
 	return false
 }
+
 func (*BaseValue) IsDict() bool {
 	return false
 }
+
 func (*BaseValue) IsNil() bool {
 	return false
 }
-func (*BaseValue) IsTrue() bool {
-	return false
-}
+
 func (v *BaseValue) IsSafe() bool {
 	return v.isSafe
 }
+
 func (*BaseValue) IsCallable() bool {
 	return false
 }
+
 func (*BaseValue) IsIterable() bool {
 	return false
 }
+
 func (*BaseValue) IsSliceable() bool {
 	return false
 }
+
 func (*BaseValue) Interface() any {
 	errors.ThrowTemplateRuntimeError("cannot convert value to interface")
 	return nil
 }
+
 func (*BaseValue) ReflectValue() reflect.Value {
 	errors.ThrowTemplateRuntimeError("cannot get reflect value")
 	return reflect.Value{}
 }
+
 func (*BaseValue) String() string {
 	errors.ThrowTemplateRuntimeError("cannot convert value to string")
 	return ""
 }
+
 func (*BaseValue) Escaped() string {
 	errors.ThrowTemplateRuntimeError("cannot convert value to string")
 	return ""
 }
+
 func (*BaseValue) Integer() int {
 	errors.ThrowTemplateRuntimeError("cannot convert value to integer")
 	return 0
 }
+
 func (*BaseValue) Float() float64 {
 	errors.ThrowTemplateRuntimeError("cannot convert value to float")
 	return 0
 }
+
 func (*BaseValue) Bool() bool {
 	errors.ThrowTemplateRuntimeError("cannot convert value to bool")
 	return false
 }
+
 func (*BaseValue) Len() int {
 	errors.ThrowTemplateRuntimeError("cannot get length of value")
 	return 0
 }
+
 func (*BaseValue) Slice(i, j int) Value {
 	errors.ThrowTemplateRuntimeError("cannot slice value")
 	return nil
 }
+
 func (*BaseValue) Index(i int) Value {
 	errors.ThrowTemplateRuntimeError("cannot index value")
 	return nil
 }
+
 func (*BaseValue) Contains(other Value) bool {
 	errors.ThrowTemplateRuntimeError("cannot check if value contains another value")
 	return false
 }
+
 func (*BaseValue) Keys() ValuesList {
 	errors.ThrowTemplateRuntimeError("cannot get keys of value")
 	return nil
 }
+
 func (*BaseValue) Values() ValuesList {
 	errors.ThrowTemplateRuntimeError("cannot get values of value")
 	return nil
 }
+
 func (*BaseValue) Items() []*Pair {
 	errors.ThrowTemplateRuntimeError("cannot get items of value")
 	return nil
 }
+
 func (*BaseValue) GetItem(key any) Value {
 	errors.ThrowTemplateRuntimeError("cannot set value")
 	return nil
 }
+
 func (*BaseValue) SetItem(key string, value any) {
 	errors.ThrowTemplateRuntimeError("cannot set value")
 }
+
 func (*BaseValue) Iterate(fn func(idx, count int, key, value Value) bool, empty func()) {
 	errors.ThrowTemplateRuntimeError("cannot iterate over value")
 }
-func (*BaseValue) IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse bool, sorted bool, caseSensitive bool) {
+
+func (*BaseValue) IterateOrder(fn func(idx, count int, key, value Value) bool, empty func(), reverse, sorted, caseSensitive bool) {
 	errors.ThrowTemplateRuntimeError("cannot iterate over value")
 }
+
 func (*BaseValue) EqualValueTo(other Value) bool {
 	errors.ThrowTemplateRuntimeError("cannot compare values")
 	return false

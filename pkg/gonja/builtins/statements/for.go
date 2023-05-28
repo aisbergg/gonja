@@ -20,8 +20,10 @@ type ForStmt struct {
 	emptyWrapper *parse.WrapperNode
 }
 
-var _ parse.Statement = (*ForStmt)(nil)
-var _ exec.Statement = (*ForStmt)(nil)
+var (
+	_ parse.Statement = (*ForStmt)(nil)
+	_ exec.Statement  = (*ForStmt)(nil)
+)
 
 func (stmt *ForStmt) Position() *parse.Token { return stmt.bodyWrapper.Position() }
 func (stmt *ForStmt) String() string {
@@ -91,7 +93,7 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 		}
 
 		if stmt.ifCondition != nil {
-			if !sub.Eval(stmt.ifCondition).IsTrue() {
+			if !sub.Eval(stmt.ifCondition).Bool() {
 				return true
 			}
 		}
@@ -138,22 +140,22 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 		loop.RevIndex0 = length - (idx + 1)
 
 		if idx == 0 {
-			loop.PrevItem = exec.NewNilValue()
+			loop.PrevItem = r.ValueFactory.NewUndefined("loop.previtem", "there is no previous item")
 		} else {
 			pp := items.Pairs[idx-1]
 			if pp.Value != nil {
-				loop.PrevItem = r.ValueVactory.NewValue([2]exec.Value{pp.Key, pp.Value}, false)
+				loop.PrevItem = r.ValueFactory.Value([2]exec.Value{pp.Key, pp.Value})
 			} else {
 				loop.PrevItem = pp.Key
 			}
 		}
 
 		if idx == length-1 {
-			loop.NextItem = exec.NewNilValue()
+			loop.NextItem = r.ValueFactory.NewUndefined("loop.nextitem", "there is no next item")
 		} else {
 			np := items.Pairs[idx+1]
 			if np.Value != nil {
-				loop.NextItem = r.ValueVactory.NewValue([2]exec.Value{np.Key, np.Value}, false)
+				loop.NextItem = r.ValueFactory.Value([2]exec.Value{np.Key, np.Value})
 			} else {
 				loop.NextItem = np.Key
 			}
@@ -168,7 +170,7 @@ func (stmt *ForStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 	}
 }
 
-func forParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func forParser(p, args *parse.Parser) parse.Statement {
 	stmt := &ForStmt{}
 
 	// Arguments parsing
@@ -198,7 +200,7 @@ func forParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	}
 
 	if args.MatchName("if") != nil {
-		var ifCondition = args.ParseExpression()
+		ifCondition := args.ParseExpression()
 		stmt.ifCondition = ifCondition
 	}
 

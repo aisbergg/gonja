@@ -14,8 +14,10 @@ type WithStmt struct {
 	Wrapper  *parse.WrapperNode
 }
 
-var _ parse.Statement = (*WithStmt)(nil)
-var _ exec.Statement = (*WithStmt)(nil)
+var (
+	_ parse.Statement = (*WithStmt)(nil)
+	_ exec.Statement  = (*WithStmt)(nil)
+)
 
 func (stmt *WithStmt) Position() *parse.Token { return stmt.Location }
 func (stmt *WithStmt) String() string {
@@ -38,7 +40,7 @@ func (stmt *WithStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockNode) {
 	}
 }
 
-func withParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func withParser(p, args *parse.Parser) parse.Statement {
 	stmt := &WithStmt{
 		Location: p.Current(),
 		Pairs:    map[string]parse.Expression{},

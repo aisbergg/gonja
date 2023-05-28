@@ -18,21 +18,6 @@ func Ellipsis(text string, length int) string {
 	return string(runes[:length-1]) + "…"
 }
 
-var htmlEscaper = strings.NewReplacer(
-	`&`, "&amp;",
-	`<`, "&lt;",
-	`>`, "&gt;",
-	`"`, "&quot;",
-	`'`, "&#39;",
-)
-
-// HTMLEscape escapes HTML-unsafe characters with Unicode escapes. The resulting
-// escaped string differs slightly from `html.EscapeString`, because the latter
-// one uses `&#34;` for quotes instead of `&quot;`
-func HTMLEscape(in string) string {
-	return htmlEscaper.Replace(in)
-}
-
 const filterIRIChars = "/#%[]=:;$&()+,!?*@'~"
 
 // IRIEncode converts an Internationalized Resource Identifier (IRI) to a string
@@ -128,7 +113,7 @@ func LoremIpsum(count int, method string) (string, error) {
 
 // Lipsum generates `n` paragraphs of text from lorem ipsum words. Each
 // paragraph will contain between `min` and `max` random words.
-func Lipsum(n int, html bool, min int, max int) string {
+func Lipsum(n int, html bool, min, max int) string {
 	result := []string{}
 
 	for i := 0; i < n; i++ {

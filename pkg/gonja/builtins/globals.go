@@ -50,11 +50,11 @@ func Dict(va *exec.VarArgs) exec.Value {
 	dict := exec.NewDict()
 	for _, kv := range va.Kwargs {
 		dict.Pairs = append(dict.Pairs, &exec.Pair{
-			Key:   va.ValueFactory.NewValue(kv.Key, false),
+			Key:   va.ValueFactory.Value(kv.Key),
 			Value: kv.Value,
 		})
 	}
-	return va.ValueFactory.NewValue(dict, false)
+	return va.ValueFactory.Value(dict)
 }
 
 type cycler struct {
@@ -88,7 +88,7 @@ func Cycler(va *exec.VarArgs) exec.Value {
 		"reset": c.Reset,
 	}
 	c.Reset()
-	return va.ValueFactory.NewValue(c.getters, false)
+	return va.ValueFactory.Value(c.getters)
 }
 
 type joiner struct {
@@ -111,7 +111,7 @@ func Joiner(va *exec.VarArgs) exec.Value {
 	}
 	sep := p.GetKwarg("sep").String()
 	j := &joiner{sep: sep}
-	return va.ValueFactory.NewValue(j.String, false)
+	return va.ValueFactory.Value(j.String)
 }
 
 func Namespace(va *exec.VarArgs) map[string]any {
@@ -136,5 +136,5 @@ func Lipsum(va *exec.VarArgs) exec.Value {
 	html := p.GetKwarg("html").Bool()
 	min := p.GetKwarg("min").Integer()
 	max := p.GetKwarg("max").Integer()
-	return va.ValueFactory.NewValue(utils.Lipsum(n, html, min, max), true)
+	return va.ValueFactory.SafeValue(utils.Lipsum(n, html, min, max))
 }

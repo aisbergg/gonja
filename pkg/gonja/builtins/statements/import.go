@@ -19,11 +19,14 @@ type ImportStmt struct {
 	Template     *parse.TemplateNode
 }
 
-var _ parse.Statement = (*ImportStmt)(nil)
-var _ exec.Statement = (*ImportStmt)(nil)
+var (
+	_ parse.Statement = (*ImportStmt)(nil)
+	_ exec.Statement  = (*ImportStmt)(nil)
+)
 
 // Position returns the position of the statement.
 func (stmt *ImportStmt) Position() *parse.Token { return stmt.Location }
+
 func (stmt *ImportStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("ImportStmt(Line=%d Col=%d)", t.Line, t.Col)
@@ -68,6 +71,7 @@ type FromImportStmt struct {
 
 // Position returns the position of the statement.
 func (stmt *FromImportStmt) Position() *parse.Token { return stmt.Location }
+
 func (stmt *FromImportStmt) String() string {
 	t := stmt.Position()
 	return fmt.Sprintf("FromImportStmt(Line=%d Col=%d)", t.Line, t.Col)
@@ -96,7 +100,7 @@ func (stmt *FromImportStmt) Execute(r *exec.Renderer, tag *parse.StatementBlockN
 	}
 }
 
-func importParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func importParser(p, args *parse.Parser) parse.Statement {
 	stmt := &ImportStmt{
 		Location: p.Current(),
 		// Macros:   map[string]*parse.Macro{},
@@ -142,7 +146,7 @@ func importParser(p *parse.Parser, args *parse.Parser) parse.Statement {
 	return stmt
 }
 
-func fromParser(p *parse.Parser, args *parse.Parser) parse.Statement {
+func fromParser(p, args *parse.Parser) parse.Statement {
 	stmt := &FromImportStmt{
 		Location: p.Current(),
 		As:       map[string]string{},

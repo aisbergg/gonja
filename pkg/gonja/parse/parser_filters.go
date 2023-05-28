@@ -26,28 +26,19 @@ func (p *Parser) ParseFilter() *FilterCall {
 		Kwargs: map[string]Expression{},
 	}
 
-	// // Get the appropriate filter function and bind it
-	// filterFn, exists := filters[identToken.Val]
-	// if !exists {
-	// 	return nil, p.Error(fmt.Sprintf("Filter '%s' does not exist.", identToken.Val), identToken)
-	// }
-
-	// filter.filterFunc = filterFn
-
-	// Check for filter-argument (2 tokens needed: ':' ARG)
 	if p.Match(TokenLparen) != nil {
-		if p.Peek(TokenVariableEnd) != nil {
-			errors.ThrowSyntaxError(p.Current().ErrorToken(), "filter parameter required after '('")
-		}
-
+		noMoreArgs := false
 		for p.Match(TokenComma) != nil || p.Match(TokenRparen) == nil {
-			// TODO: Handle multiple args and kwargs
+			// parse args and kwargs
 			v := p.ParseExpression()
-
 			if p.Match(TokenAssign) != nil {
 				key := v.Position().Val
 				filter.Kwargs[key] = p.ParseExpression()
+				noMoreArgs = true
 			} else {
+				if noMoreArgs {
+					errors.ThrowSyntaxError(p.Current().ErrorToken(), "positional argument must be before keyword argument")
+				}
 				filter.Args = append(filter.Args, v)
 			}
 		}

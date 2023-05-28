@@ -1,7 +1,6 @@
 package builtins
 
 import (
-	"reflect"
 	"strings"
 
 	"github.com/aisbergg/gonja/pkg/gonja/errors"
@@ -50,10 +49,7 @@ func testCallable(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
 
 // testDefined returns true if the input is a defined value.
 func testDefined(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
-	if _, ok := in.(exec.Undefined); ok {
-		return true
-	}
-	return false
+	return exec.IsDefined(in)
 }
 
 // testDivisibleby returns true if the input is divisible by the given number.
@@ -186,7 +182,7 @@ func testOdd(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
 func testSameas(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
 	p := params.ExpectArgs(1)
 	if p.IsError() {
-		errors.ThrowFilterArgumentError("sameas(value, other)", p.Error())
+		errors.ThrowFilterArgumentError("sameas(other)", p.Error())
 	}
 	param := params.Args[0]
 	if in.IsNil() && param.IsNil() {
@@ -194,7 +190,8 @@ func testSameas(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
 	} else if param.ReflectValue().CanAddr() && in.ReflectValue().CanAddr() {
 		return param.ReflectValue().Addr() == in.ReflectValue().Addr()
 	}
-	return reflect.Indirect(param.ReflectValue()) == reflect.Indirect(in.ReflectValue())
+	return false
+	// return reflect.Indirect(param.ReflectValue()) == reflect.Indirect(in.ReflectValue())
 }
 
 func testString(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
@@ -202,8 +199,7 @@ func testString(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
 }
 
 func testUndefined(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {
-	defined := testDefined(ctx, in, params)
-	return !defined
+	return !exec.IsDefined(in)
 }
 
 func testUpper(ctx *exec.Context, in exec.Value, params *exec.VarArgs) bool {

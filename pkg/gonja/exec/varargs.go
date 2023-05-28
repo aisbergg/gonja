@@ -22,8 +22,24 @@ type VarArgs struct {
 // NewVarArgs creates a new VarArgs.
 func NewVarArgs(valueFactory *ValueFactory) *VarArgs {
 	return &VarArgs{
-		Args:   []Value{},
-		Kwargs: make([]KVPair, 0),
+		Args:         make([]Value, 0, 8),
+		Kwargs:       make([]KVPair, 0, 8),
+		ValueFactory: valueFactory,
+	}
+}
+
+// NewVarArgsWithValues creates a new VarArgs from a list of Values.
+func NewVarArgsWithValues(valueFactory *ValueFactory, args []Value, kwargs []KVPair) *VarArgs {
+	if args == nil {
+		args = make([]Value, 0, 8)
+	}
+	if kwargs == nil {
+		kwargs = make([]KVPair, 0, 8)
+	}
+	return &VarArgs{
+		Args:         args,
+		Kwargs:       kwargs,
+		ValueFactory: valueFactory,
 	}
 }
 
@@ -87,7 +103,7 @@ func (va *VarArgs) setDefaultKwarg(key string, value any) {
 			return
 		}
 	}
-	va.Kwargs = append(va.Kwargs, KVPair{Key: key, Value: va.ValueFactory.NewValue(value, false)})
+	va.Kwargs = append(va.Kwargs, KVPair{Key: key, Value: va.ValueFactory.Value(value)})
 }
 
 // Kwarg represents a keyword argument.
@@ -100,8 +116,9 @@ type Kwarg struct {
 func (va *VarArgs) Expect(args int, kwargs []*Kwarg) *ReducedVarArgs {
 	rva := &ReducedVarArgs{VarArgs: va}
 	reduced := &VarArgs{
-		Args:   va.Args,
-		Kwargs: make([]KVPair, 0),
+		Args:         va.Args,
+		Kwargs:       make([]KVPair, 0),
+		ValueFactory: va.ValueFactory,
 	}
 
 	if args == 0 && len(kwargs) == 0 && (len(va.Args) > 0 || len(va.Kwargs) > 0) {

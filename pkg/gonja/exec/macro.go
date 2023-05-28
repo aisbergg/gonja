@@ -70,6 +70,6 @@ func MacroNodeToFunc(node *parse.MacroNode, r *Renderer) Macro {
 			// pass error up the call stack
 			panic(err)
 		}
-		return r.ValueVactory.NewValue(out.String(), true)
+		return r.ValueFactory.SafeValue(out.String())
 	}
 }
