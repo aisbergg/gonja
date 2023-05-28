@@ -1,6 +1,6 @@
 module github.com/aisbergg/gonja/pkg/gonja/ext/time
 
-go 1.18
+go 1.19
 
 require (
 	github.com/aisbergg/gonja v0.0.0

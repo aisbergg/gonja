@@ -1,6 +1,6 @@
 module github.com/aisbergg/gonja/tools
 
-go 1.18
+go 1.19
 
 require (
 	github.com/aisbergg/go-pre-commit v0.0.0-20230409191849-1a433f0c60a6
