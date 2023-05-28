@@ -2,6 +2,8 @@ package errors
 
 import (
 	"fmt"
+
+	debug "github.com/aisbergg/gonja/internal/debug/parse"
 )
 
 // -----------------------------------------------------------------------------
@@ -46,6 +48,12 @@ func (e *templateSyntaxError) Enrich(tk *Token) {
 
 // ThrowSyntaxError throws a syntax error.
 func ThrowSyntaxError(token *Token, format string, args ...any) {
+	if debug.Enabled {
+		// in debug mode we include a stack trace with the error message
+		stackTrace := getStackTrace(1)
+		format = format + "\n\n%s"
+		args = append(args, stackTrace)
+	}
 	panic(&templateSyntaxError{
 		msg:   fmt.Sprintf(format, args...),
 		token: token,
@@ -73,6 +81,12 @@ func (e *templateSyntaxError) TemplateAssertionError() {}
 
 // ThrowTemplateAssertionError throws a filter argument error.
 func ThrowTemplateAssertionError(fname, format string, args ...any) {
+	if debug.Enabled {
+		// in debug mode we include a stack trace with the error message
+		stackTrace := getStackTrace(1)
+		format = format + "\n\n%s"
+		args = append(args, stackTrace)
+	}
 	panic(&templateAssertionError{
 		templateSyntaxError: templateSyntaxError{
 			msg: fmt.Sprintf(format, args...),

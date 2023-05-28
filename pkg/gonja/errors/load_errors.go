@@ -38,7 +38,7 @@ func (e *templateLoadError) Name() string {
 }
 
 // NewTemplateLoadError creates a new TemplateLoadError.
-func NewTemplateLoadError(name string, format string, args ...any) TemplateLoadError {
+func NewTemplateLoadError(name, format string, args ...any) TemplateLoadError {
 	return &templateLoadError{
 		msg:  fmt.Sprintf(format, args...),
 		name: name,

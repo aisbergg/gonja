@@ -2,6 +2,8 @@ package errors
 
 import (
 	"fmt"
+
+	debug "github.com/aisbergg/gonja/internal/debug/exec"
 )
 
 // -----------------------------------------------------------------------------
@@ -31,6 +33,9 @@ func (e *templateRuntimeError) TemplateError() {}
 func (e *templateRuntimeError) TemplateRuntimeError() {}
 
 func (e *templateRuntimeError) Error() string {
+	if e.token == nil {
+		return e.msg
+	}
 	return fmt.Sprintf("%s (pos: %d, line: %d, column: %d, near: '%s')", e.msg, e.token.Pos, e.token.Line, e.token.Col, e.token.Val)
 }
 
@@ -46,6 +51,12 @@ func (e *templateRuntimeError) Enrich(tk *Token) {
 
 // NewTemplateRuntimeError creates a new TemplateRuntimeError.
 func NewTemplateRuntimeError(format string, args ...any) TemplateRuntimeError {
+	if debug.Enabled {
+		// in debug mode we include a stack trace with the error message
+		stackTrace := getStackTrace(1)
+		format = format + "\n\n%s"
+		args = append(args, stackTrace)
+	}
 	return &templateRuntimeError{
 		msg: fmt.Sprintf(format, args...),
 	}
@@ -53,6 +64,12 @@ func NewTemplateRuntimeError(format string, args ...any) TemplateRuntimeError {
 
 // ThrowTemplateRuntimeError throws a generic template runtime error.
 func ThrowTemplateRuntimeError(format string, args ...any) {
+	if debug.Enabled {
+		// in debug mode we include a stack trace with the error message
+		stackTrace := getStackTrace(1)
+		format = format + "\n\n%s"
+		args = append(args, stackTrace)
+	}
 	panic(&templateRuntimeError{
 		msg: fmt.Sprintf(format, args...),
 	})
@@ -77,6 +94,12 @@ type filterArgumentError struct {
 
 // ThrowFilterArgumentError throws a filter argument error.
 func ThrowFilterArgumentError(fname, format string, args ...any) {
+	if debug.Enabled {
+		// in debug mode we include a stack trace with the error message
+		stackTrace := getStackTrace(1)
+		format = format + "\n\n%s"
+		args = append(args, stackTrace)
+	}
 	msg := fmt.Sprintf(format, args...)
 	panic(&filterArgumentError{
 		templateRuntimeError: templateRuntimeError{
@@ -109,12 +132,17 @@ type undefinedError struct {
 }
 
 // ThrowUndefinedError throws an undefined error.
-func ThrowUndefinedError(varName string, hint string) {
+func ThrowUndefinedError(varName, hint string) {
 	msg := ""
 	if hint == "" {
 		msg = fmt.Sprintf("undefined variable: %s", varName)
 	} else {
 		msg = fmt.Sprintf("undefined: %s", hint)
+	}
+	if debug.Enabled {
+		// in debug mode we include a stack trace with the error message
+		stackTrace := getStackTrace(1)
+		msg = msg + "\n\n" + stackTrace
 	}
 	panic(&undefinedError{
 		templateRuntimeError: templateRuntimeError{
