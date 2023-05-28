@@ -7,12 +7,6 @@ import (
 	"github.com/aisbergg/gonja/pkg/gonja/exec"
 )
 
-func failsafe(t *testing.T) {
-	if err := recover(); err != nil {
-		t.Error(err)
-	}
-}
-
 func TestVarArgs(t *testing.T) {
 	t.Run("first", testVAFirst)
 	t.Run("GetKwarg", testVAGetKwarg)
@@ -21,7 +15,6 @@ func TestVarArgs(t *testing.T) {
 
 func testVAFirst(t *testing.T) {
 	t.Run("nil if empty", func(t *testing.T) {
-		// defer failsafe(t)
 		assert := testutils.NewAssert(t)
 
 		va := exec.VarArgs{}
@@ -29,7 +22,6 @@ func testVAFirst(t *testing.T) {
 		assert.True(first.IsNil())
 	})
 	t.Run("first value", func(t *testing.T) {
-		// defer failsafe(t)
 		assert := testutils.NewAssert(t)
 
 		va := exec.VarArgs{Args: []exec.Value{testutils.NewValue(42)}}
@@ -40,7 +32,6 @@ func testVAFirst(t *testing.T) {
 
 func testVAGetKwarg(t *testing.T) {
 	t.Run("value if found", func(t *testing.T) {
-		// defer failsafe(t)
 		assert := testutils.NewAssert(t)
 
 		va := exec.VarArgs{Kwargs: []exec.KVPair{
@@ -50,7 +41,6 @@ func testVAGetKwarg(t *testing.T) {
 		assert.Equal(42, kwarg.Integer())
 	})
 	t.Run("defaut if missing", func(t *testing.T) {
-		// defer failsafe(t)
 		assert := testutils.NewAssert(t)
 
 		va := exec.VarArgs{}
@@ -303,7 +293,6 @@ func testVAExpect(t *testing.T) {
 		for _, tc := range nothingCases {
 			test := tc
 			t.Run(test.name, func(t *testing.T) {
-				// defer failsafe(t)
 				rva := test.va.ExpectNothing()
 				assertError(t, rva, test.error)
 			})
@@ -313,7 +302,6 @@ func testVAExpect(t *testing.T) {
 		for _, tc := range argsCases {
 			test := tc
 			t.Run(test.name, func(t *testing.T) {
-				// defer failsafe(t)
 				rva := test.va.ExpectArgs(test.args)
 				assertError(t, rva, test.error)
 			})
@@ -323,7 +311,6 @@ func testVAExpect(t *testing.T) {
 		for _, tc := range kwargsCases {
 			test := tc
 			t.Run(test.name, func(t *testing.T) {
-				// defer failsafe(t)
 				rva := test.va.Expect(0, test.kwargs)
 				assertError(t, rva, test.error)
 			})
@@ -333,7 +320,6 @@ func testVAExpect(t *testing.T) {
 		for _, tc := range mixedArgsKwargsCases {
 			test := tc
 			t.Run(test.name, func(t *testing.T) {
-				// defer failsafe(t)
 				assert := testutils.NewAssert(t)
 				rva := test.va.Expect(test.args, test.kwargs)
 				assertError(t, rva, test.error)

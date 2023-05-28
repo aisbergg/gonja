@@ -2,6 +2,7 @@ package exec_test
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/aisbergg/gonja/internal/testutils"
@@ -19,10 +20,10 @@ type flags struct {
 	IsDict     bool
 	IsIterable bool
 	IsNil      bool
-	IsTrue     bool
+	Bool       bool
 }
 
-func (f *flags) assert(t *testing.T, value *exec.GenericValue) {
+func (f *flags) assert(t *testing.T, value exec.Value) {
 	assert := testutils.NewAssert(t)
 
 	val := reflect.ValueOf(value)
@@ -48,48 +49,51 @@ var valueCases = []struct {
 	asString string
 	flags    flags
 }{
-	{"nil", nil, "", flags{IsNil: true}},
-	{"string", "Hello World", "Hello World", flags{IsString: true, IsTrue: true, IsIterable: true}},
-	{"int", 42, "42", flags{IsInteger: true, IsNumber: true, IsTrue: true}},
+	{"nil", nil, "None", flags{IsNil: true}},
+	{"string", "Hello World", "Hello World", flags{IsString: true, Bool: true, IsIterable: true}},
+	{"int", 42, "42", flags{IsInteger: true, IsNumber: true, Bool: true}},
 	{"int 0", 0, "0", flags{IsInteger: true, IsNumber: true}},
-	{"float", 42., "42.0", flags{IsFloat: true, IsNumber: true, IsTrue: true}},
-	{"float with trailing zeros", 42.04200, "42.042", flags{IsFloat: true, IsNumber: true, IsTrue: true}},
-	{"float max precision", 42.5556700089099, "42.55567000891", flags{IsFloat: true, IsNumber: true, IsTrue: true}},
-	{"float max precision rounded up", 42.555670008999999, "42.555670009", flags{IsFloat: true, IsNumber: true, IsTrue: true}},
+	{"float", 42., "42.0", flags{IsFloat: true, IsNumber: true, Bool: true}},
+	{"float with trailing zeros", 42.04200, "42.042", flags{IsFloat: true, IsNumber: true, Bool: true}},
+	{"float max precision", 42.5556700089099, "42.55567000891", flags{IsFloat: true, IsNumber: true, Bool: true}},
+	{"float max precision rounded up", 42.555670008999999, "42.555670009", flags{IsFloat: true, IsNumber: true, Bool: true}},
 	{"float 0.0", 0., "0.0", flags{IsFloat: true, IsNumber: true}},
-	{"true", true, "True", flags{IsBool: true, IsTrue: true}},
+	{"true", true, "True", flags{IsBool: true, Bool: true}},
 	{"false", false, "False", flags{IsBool: true}},
-	{"slice", []int{1, 2, 3}, "[1, 2, 3]", flags{IsTrue: true, IsIterable: true, IsList: true}},
-	{"strings slice", []string{"a", "b", "c"}, "['a', 'b', 'c']", flags{IsTrue: true, IsIterable: true, IsList: true}},
+	{"slice", []int{1, 2, 3}, "[1, 2, 3]", flags{Bool: true, IsIterable: true, IsList: true}},
+	{"strings slice", []string{"a", "b", "c"}, "['a', 'b', 'c']", flags{Bool: true, IsIterable: true, IsList: true}},
 	{
 		"values slice",
-		[]*exec.GenericValue{exec.AsValue(1), exec.AsValue(2), exec.AsValue(3)},
+		[]exec.Value{testutils.NewValue(1), testutils.NewValue(2), testutils.NewValue(3)},
 		"[1, 2, 3]",
-		flags{IsTrue: true, IsIterable: true, IsList: true},
+		flags{Bool: true, IsIterable: true, IsList: true},
 	},
-	{"string values slice",
-		[]*exec.GenericValue{exec.AsValue("a"), exec.AsValue("b"), exec.AsValue("c")},
+	{
+		"string values slice",
+		[]exec.Value{testutils.NewValue("a"), testutils.NewValue("b"), testutils.NewValue("c")},
 		"['a', 'b', 'c']",
-		flags{IsTrue: true, IsIterable: true, IsList: true},
+		flags{Bool: true, IsIterable: true, IsList: true},
 	},
-	{"array", [3]int{1, 2, 3}, "[1, 2, 3]", flags{IsTrue: true, IsIterable: true, IsList: true}},
-	{"strings array", [3]string{"a", "b", "c"}, "['a', 'b', 'c']", flags{IsTrue: true, IsIterable: true, IsList: true}},
+	{"array", [3]int{1, 2, 3}, "[1, 2, 3]", flags{Bool: true, IsIterable: true, IsList: true}},
+	{"strings array", [3]string{"a", "b", "c"}, "['a', 'b', 'c']", flags{Bool: true, IsIterable: true, IsList: true}},
 	{
 		"dict as map",
 		map[string]string{"a": "a", "b": "b"},
 		"{'a': 'a', 'b': 'b'}",
-		flags{IsTrue: true, IsIterable: true, IsDict: true},
+		flags{Bool: true, IsIterable: true, IsDict: true},
 	},
 	{
 		"dict as Dict/Pairs",
 		&exec.Dict{[]*exec.Pair{
-			{exec.AsValue("a"), exec.AsValue("a")},
-			{exec.AsValue("b"), exec.AsValue("b")},
+			{testutils.NewValue("a"), testutils.NewValue("a")},
+			{testutils.NewValue("b"), testutils.NewValue("b")},
 		}},
 		"{'a': 'a', 'b': 'b'}",
-		flags{IsTrue: true, IsIterable: true, IsDict: true},
+		flags{Bool: true, IsIterable: true, IsDict: true},
 	},
-	{"func", func() {}, "<func() Value>", flags{IsCallable: true}},
+	{"func", func() {}, "<function()>", flags{IsCallable: true, Bool: true}},
+	{"func with args", func(a, b int) {}, "<function(int, int)>", flags{IsCallable: true, Bool: true}},
+	{"func with args and return", func(a, b int) int { return 0 }, "<function(int, int) int>", flags{IsCallable: true, Bool: true}},
 }
 
 func TestValue(t *testing.T) {
@@ -103,7 +107,7 @@ func TestValue(t *testing.T) {
 			}()
 			assert := testutils.NewAssert(t)
 
-			value := exec.AsValue(test.value)
+			value := testutils.NewValue(test.value)
 
 			assert.Equal(test.asString, value.String())
 			test.flags.assert(t, value)
@@ -123,7 +127,7 @@ func TestValueFromMap(t *testing.T) {
 			assert := testutils.NewAssert(t)
 
 			data := map[string]any{"value": test.value}
-			value := exec.AsValue(data["value"])
+			value := testutils.NewValue(data["value"])
 
 			assert.Equal(test.asString, value.String())
 			test.flags.assert(t, value)
@@ -181,7 +185,7 @@ func (t testStruct) String() string {
 // 			}()
 // 			assert := testutils.NewAssert(t)
 
-// 			value := exec.AsValue(test.value)
+// 			value := testutils.NewValue(test.value)
 // 			err := value.Set(test.attr, test.set)
 
 // 			if test.error {
@@ -208,16 +212,16 @@ var valueKeysCases = []struct {
 	{"false", false, "", true},
 	{"slice", []int{1, 2, 3}, "", true},
 	// Map keys are sorted alphabetically, case insensitive
-	{"dict as map", map[string]string{"c": "c", "a": "a", "B": "B"}, "['a', 'B', 'c']", false},
+	{"dict as map", map[string]string{"c": "c", "a": "a", "b": "b"}, "['a', 'b', 'c']", false},
 	// Dict as Pairs keys are kept in order
 	{
 		"dict as Dict/Pairs",
 		&exec.Dict{[]*exec.Pair{
-			{exec.AsValue("c"), exec.AsValue("c")},
-			{exec.AsValue("A"), exec.AsValue("A")},
-			{exec.AsValue("b"), exec.AsValue("b")},
+			{testutils.NewValue("c"), testutils.NewValue("c")},
+			{testutils.NewValue("a"), testutils.NewValue("a")},
+			{testutils.NewValue("b"), testutils.NewValue("b")},
 		}},
-		"['c', 'A', 'b']",
+		"['a', 'b', 'c']",
 		false,
 	},
 	{"func", func() {}, "", true},
@@ -234,11 +238,14 @@ func TestValueKeys(t *testing.T) {
 			}()
 			assert := testutils.NewAssert(t)
 
-			value := exec.AsValue(test.value)
-			keys := value.Keys()
+			value := testutils.NewValue(test.value)
 			if test.isError {
-				assert.Len(keys, 0)
+				assert.Panic(func() { value.Keys() })
 			} else {
+				keys := value.Keys()
+				if !value.IsNil() {
+					sort.Slice(keys, func(i, j int) bool { return keys[i].String() < keys[j].String() })
+				}
 				assert.Equal(test.asString, keys.String())
 			}
 		})

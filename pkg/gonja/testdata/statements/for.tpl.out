@@ -81,16 +81,16 @@ Changed
 3: True
 
 Prev/Next items
-0: prev:  next: 1
+0: prev: None next: 1
 1: prev: 0 next: 2
-2: prev: 1 next: 
+2: prev: 1 next: None
 
 Prev/Next items 2-tuple
-1 first: prev:  next: [2, 'second']
+1 first: prev: None next: [2, 'second']
 2 second: prev: [1, 'first'] next: [3, 'third']
-3 third: prev: [2, 'second'] next: 
+3 third: prev: [2, 'second'] next: None
 
 Prev/Next items with if
-0: prev:  next: 2
+0: prev: None next: 2
 2: prev: 0 next: 4
-4: prev: 2 next: 
+4: prev: 2 next: None

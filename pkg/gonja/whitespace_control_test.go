@@ -9,7 +9,7 @@ import (
 	"github.com/aisbergg/gonja/internal/diff"
 	gonja "github.com/aisbergg/gonja/pkg/gonja"
 
-	tu "github.com/aisbergg/gonja/pkg/gonja/testutils"
+	tu "github.com/aisbergg/gonja/internal/testutils"
 )
 
 var testCases = []struct {
@@ -25,8 +25,10 @@ var testCases = []struct {
 	{"all", true, true, true},
 }
 
-const source = "testdata/whitespaces/source.tpl"
-const result = "testdata/whitespaces/%s.out"
+const (
+	source = "testdata/whitespaces/source.tpl"
+	result = "testdata/whitespaces/%s.out"
+)
 
 func TestWhiteSpace(t *testing.T) {
 	for _, tc := range testCases {
@@ -37,12 +39,19 @@ func TestWhiteSpace(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			env := gonja.NewEnvironment(
+			options := []gonja.Option{
 				gonja.OptLoader(gonja.MustFileSystemLoader("")),
-				gonja.OptTrimBlocks(),
-				gonja.OptLstripBlocks(),
-				gonja.OptKeepTrailingNewline(),
-			)
+			}
+			if test.trimBlocks {
+				options = append(options, gonja.OptTrimBlocks())
+			}
+			if test.lstripBlocks {
+				options = append(options, gonja.OptLstripBlocks())
+			}
+			if test.keepTrailingNewline {
+				options = append(options, gonja.OptKeepTrailingNewline())
+			}
+			env := gonja.NewEnvironment(options...)
 
 			tpl, err := env.FromFile(source)
 			if err != nil {
@@ -63,7 +72,10 @@ func TestWhiteSpace(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to compute diff for %s:\n%s", source, err.Error())
 				}
-				t.Errorf("%s rendered with diff:\n%v", source, d)
+				fmt.Println(string(expected))
+				fmt.Println("-----------------")
+				fmt.Println(string(rendered))
+				t.Errorf("%s rendered with diff:\n%s", source, string(d))
 			}
 		})
 	}

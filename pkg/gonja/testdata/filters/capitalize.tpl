@@ -1,3 +1,4 @@
+{{ none|capitalize }}
 {{ ""|capitalize }}
 {{ 5|capitalize }}
 {{ "h"|capitalize }}

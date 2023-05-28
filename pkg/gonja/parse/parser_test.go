@@ -586,7 +586,7 @@ func (val val) assert(t *testing.T, value reflect.Value) {
 	}
 }
 
-func _literal(typ any, value any) asserter {
+func _literal(typ, value any) asserter {
 	return specs{typ, attrs{
 		"Val": val{value},
 	}}
@@ -620,8 +620,8 @@ type slice []asserter
 
 func (slice slice) assert(t *testing.T, value reflect.Value) {
 	assert := testutils.NewAssert(t)
-	if assert.Equal(t, reflect.Slice, value.Kind()) {
-		if assert.Equal(t, len(slice), value.Len()) {
+	if assert.Equal(reflect.Slice, value.Kind()) {
+		if assert.Equal(len(slice), value.Len()) {
 			for idx, specs := range slice {
 				specs.assert(t, value.Index(idx))
 			}

@@ -14,12 +14,12 @@ var ctxCases = []struct {
 	flags    flags
 }{
 	{"nil", nil, "", flags{IsNil: true}},
-	{"string", "Hello World", "Hello World", flags{IsString: true, IsTrue: true}},
-	{"int", 42, "42", flags{IsInteger: true, IsNumber: true, IsTrue: true}},
+	{"string", "Hello World", "Hello World", flags{IsString: true, Bool: true, IsIterable: true}},
+	{"int", 42, "42", flags{IsInteger: true, IsNumber: true, Bool: true}},
 	{"int 0", 0, "0", flags{IsInteger: true, IsNumber: true}},
-	{"float", 42., "42.000000", flags{IsFloat: true, IsNumber: true, IsTrue: true}},
+	{"float", 42., "42.000000", flags{IsFloat: true, IsNumber: true, Bool: true}},
 	{"float 0.0", 0., "0.000000", flags{IsFloat: true, IsNumber: true}},
-	{"true", true, "True", flags{IsBool: true, IsTrue: true}},
+	{"true", true, "True", flags{IsBool: true, Bool: true}},
 	{"false", false, "False", flags{IsBool: true}},
 }
 
@@ -34,15 +34,14 @@ func TestContext(t *testing.T) {
 			}()
 			assert := testutils.NewAssert(t)
 
-			ctx := exec.EmptyContext()
+			ctx := exec.NewEmptyContext(testutils.ValueVactory)
 			ctx.Set(test.name, test.value)
 			value := ctx.Get(test.name)
 
-			// value := exec.AsValue(test.value)
-			assert.Equal(test.value, value)
-
-			// assert.Equal(test.asString, value.String())
-			// test.flags.assert(t, value)
+			if test.value != nil {
+				assert.Equal(test.value, value.Interface())
+			}
+			test.flags.assert(t, value)
 		})
 	}
 }
@@ -58,22 +57,21 @@ func TestSubContext(t *testing.T) {
 			}()
 			assert := testutils.NewAssert(t)
 
-			ctx := exec.EmptyContext()
+			ctx := exec.NewEmptyContext(testutils.ValueVactory)
 			ctx.Set(test.name, test.value)
 			sub := ctx.Inherit()
 			value := sub.Get(test.name)
 
-			// value := exec.AsValue(test.value)
-			assert.Equal(test.value, value)
-
-			// assert.Equal(test.asString, value.String())
-			// test.flags.assert(t, value)
+			if test.value != nil {
+				assert.Equal(test.value, value.Interface())
+			}
+			test.flags.assert(t, value)
 		})
 	}
 }
 
 func TestFuncContext(t *testing.T) {
-	ctx := exec.EmptyContext()
+	ctx := exec.NewEmptyContext(testutils.ValueVactory)
 	ctx.Set("func", func() {})
 
 	cases := []struct {

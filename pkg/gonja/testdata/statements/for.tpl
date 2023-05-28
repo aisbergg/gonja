@@ -71,15 +71,15 @@ Changed
 
 Prev/Next items
 {%- for idx in range(3)  %}
-{{ idx }}: prev: {{ loop.PrevItem }} next: {{ loop.NextItem }}
+{{ idx }}: prev: {{ loop.previtem if not loop.first else none }} next: {{ loop.nextitem if not loop.last else none }}
 {%- endfor %}
 
 Prev/Next items 2-tuple
 {%- for k, v in [(1, 'first'), (2, 'second'), (3, 'third')]  %}
-{{ k }} {{ v }}: prev: {{ loop.PrevItem }} next: {{ loop.NextItem }}
+{{ k }} {{ v }}: prev: {{ loop.previtem if not loop.first else none }} next: {{ loop.nextitem if not loop.last else none }}
 {%- endfor %}
 
 Prev/Next items with if
 {%- for idx in range(6) if idx is even  %}
-{{ idx }}: prev: {{ loop.PrevItem }} next: {{ loop.NextItem }}
+{{ idx }}: prev: {{ loop.previtem if not loop.first else none }} next: {{ loop.nextitem if not loop.last else none }}
 {%- endfor %}

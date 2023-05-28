@@ -1,0 +1,9 @@
+{{ true | bool }}
+{{ false | bool }}
+{{ true | boolean }}
+{{ false | boolean }}
+{{ "foobar" | bool }}
+{{ "" | bool }}
+{{ 5.5 | bool }}
+{{ 0.0 | bool }}
+{{ nil | bool }}
