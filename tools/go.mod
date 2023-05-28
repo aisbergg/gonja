@@ -1,4 +1,4 @@
-module github.com/aisbergg/go-bruh/tools
+module github.com/aisbergg/gonja/tools
 
 go 1.18
 
