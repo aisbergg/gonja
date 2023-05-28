@@ -15,10 +15,13 @@ import (
 // FilesystemLoader represents a local filesystem loader for templates.
 //
 // Search paths can be relative or absolute. Relative paths are relative to the
-// current working directory.
+// current working directory. For security reasons, the loader prevents access
+// to files outside of the search paths. This means that path traversal using
+// `../` is not possible.
 //
-// If you want to improve performance, you can use the [CachedLoader] to cache the loaded templates. Simply wrap the
-// FilesystemLoader with the CachedLoader like this:
+// If you want to improve performance, you can use the [CachedLoader] to cache
+// the loaded templates. Simply wrap the FilesystemLoader with the CachedLoader
+// like this:
 //
 //	loader := loaders.NewCachedLoader(loaders.MustNewFileSystemLoader("templates"))
 type FilesystemLoader struct {
@@ -102,8 +105,6 @@ func NewFileSystemLoaderWithOptions(
 
 // Load returns a template by name.
 func (fs *FilesystemLoader) Load(name string, cfg *exec.EvalConfig) (*exec.Template, error) {
-	name = filepath.Clean(name)
-
 	// load file
 	reader, err := fs.loadFile(name)
 	if err != nil {
@@ -127,11 +128,11 @@ func (fs *FilesystemLoader) Load(name string, cfg *exec.EvalConfig) (*exec.Templ
 // loadFile goes through the search paths and returns the contents of the first
 // file that is found.
 func (fs *FilesystemLoader) loadFile(path string) (io.ReadCloser, error) {
-	// clean up path
-	path = filepath.Clean(path)
+	// clean path to prevent directory traversal
+	cleanedPath := filepath.Join("/", path)
 
 	for _, searchPath := range fs.searchPaths {
-		absPath := filepath.Join(searchPath, path)
+		absPath := filepath.Join(searchPath, cleanedPath)
 		// check if path exists
 		stat, err := os.Stat(absPath)
 		if os.IsNotExist(err) {
@@ -149,7 +150,7 @@ func (fs *FilesystemLoader) loadFile(path string) (io.ReadCloser, error) {
 		// open file
 		file, err := os.Open(absPath)
 		if err != nil {
-			return nil, errors.NewTemplateLoadError(path, "failed to open file '%s': %s", path, err)
+			return nil, errors.NewTemplateLoadError(cleanedPath, "failed to open file '%s': %s", path, err)
 		}
 		reader := bufio.NewReader(file)
 		if fs.encoding != nil {
