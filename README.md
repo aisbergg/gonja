@@ -1,172 +1,270 @@
-# Gonja
+<a name="readme-top"></a>
 
-[![GoDoc](https://godoc.org/github.com/aisbergg/gonja?status.svg)](https://godoc.org/github.com/aisbergg/gonja)
-[![Build Status](https://travis-ci.org/aisbergg/gonja.svg?branch=master)](https://travis-ci.org/aisbergg/gonja)
-[![Coverage Status](https://codecov.io/gh/aisbergg/gonja/branch/master/graph/badge.svg)](https://codecov.io/gh/aisbergg/gonja)
+[![GoDoc](https://pkg.go.dev/badge/github.com/aisbergg/gonja)](https://pkg.go.dev/github.com/aisbergg/gonja/pkg/gonja)
+[![GoReport](https://goreportcard.com/badge/github.com/aisbergg/gonja)](https://goreportcard.com/report/github.com/aisbergg/gonja)
+[![Coverage Status](https://codecov.io/gh/aisbergg/gonja/branch/main/graph/badge.svg)](https://codecov.io/gh/aisbergg/gonja)
+[![CodeQL](https://github.com/aisbergg/gonja/actions/workflows/codeql.yml/badge.svg
+)](https://github.com/aisbergg/gonja/actions/workflows/codeql.yml)
+[![License](https://img.shields.io/github/license/aisbergg/gonja)](https://pkg.go.dev/github.com/aisbergg/gonja)
+[![LinkedIn](https://img.shields.io/badge/-LinkedIn-green.svg?logo=linkedin&colorB=555)](https://www.linkedin.com/in/andre-lehmann-97408221a/)
 
-`gonja` is [`pongo2`](https://github.com/flosch/pongo2) fork intended to be aligned on `Jinja` template syntax instead of the `Django` one.
+<br />
+<br />
+<div align="center">
+  <a href="https://github.com/aisbergg/gonja">
+    <img src="assets/logo.svg" alt="Logo" width="160" height="160">
+  </a>
 
-Install/update using `go get` (no dependencies required by `gonja`):
-```
+  <h2 align="center"><b>Gonja - Jinja2-like Templating</b></h2>
+
+  <p align="center">
+    Ignite your Go code with Jinja2-inspired magic and turbocharge your templating game!
+    <br />
+    <br />
+    <a href="https://pkg.go.dev/github.com/aisbergg/gonja/pkg/gonja">View Docs</a>
+    ·
+    <a href="https://github.com/aisbergg/gonja/issues">Report Bug</a>
+    ·
+    <a href="https://github.com/aisbergg/gonja/issues">Request Feature</a>
+  </p>
+</div>
+
+<details>
+  <summary>Table of Contents</summary>
+
+- [About](#about)
+- [Installation](#installation)
+- [Synopsis](#synopsis)
+  - [General Usage](#general-usage)
+  - [Custom Filters and Tests](#custom-filters-and-tests)
+  - [Custom Value Types](#custom-value-types)
+  - [Handling of Undefined Variables](#handling-of-undefined-variables)
+  - [Extensions](#extensions)
+  - [References](#references)
+    - [Tests](#tests)
+    - [Filters](#filters)
+    - [Tags](#tags)
+- [Roadmap](#roadmap)
+- [Benchmark](#benchmark)
+- [Contributing](#contributing)
+- [License](#license)
+- [Contact](#contact)
+- [Acknowledgments](#acknowledgments)
+
+</details>
+
+
+
+## About
+
+Gonja is your go-to templating engine for Go, closely resembling the beloved Python counterpart, [Jinja2](https://jinja.palletsprojects.com/en/latest/). Seamlessly generating dynamic content for a myriad of use cases, including web applications, email personalization, report generation and many more. Say goodbye to complex coding and hello to a simple yet flexible solution for all your content generation needs.
+
+**Features:**
+
+- Jinja2-like templating engine for Go
+- Supports template inheritance, macros, filters, tests, and more
+- Customizable handling of undefined variables
+- Usage of custom value types
+- Extensibility by creating custom filters, tests and more
+
+<p align="right"><a href="#readme-top" alt="abc"><b>back to top ⇧</b></a></p>
+
+
+
+## Installation
+
+```sh
 go get github.com/aisbergg/gonja
 ```
 
-Please use the [issue tracker](https://github.com/aisbergg/gonja/issues) if you're encountering any problems with gonja or if you need help with implementing tags or filters ([create a ticket!](https://github.com/aisbergg/gonja/issues/new)).
+<p align="right"><a href="#readme-top" alt="abc"><b>back to top ⇧</b></a></p>
 
-## First impression of a template
 
-```HTML+Django
-<html><head><title>Our admins and users</title></head>
-{# This is a short example to give you a quick overview of gonja's syntax. #}
 
-{% macro user_details(user, is_admin=false) %}
-	<div class="user_item">
-		<!-- Let's indicate a user's good karma -->
-		<h2 {% if (user.karma >= 40) || (user.karma > calc_avg_karma(userlist)+5) %}
-			class="karma-good"{% endif %}>
-			
-			<!-- This will call user.String() automatically if available: -->
-			{{ user }}
-		</h2>
+## Synopsis
 
-		<!-- Will print a human-readable time duration like "3 weeks ago" -->
-		<p>This user registered {{ user.register_date|naturaltime }}.</p>
-		
-		<!-- Let's allow the users to write down their biography using markdown;
-		     we will only show the first 15 words as a preview -->
-		<p>The user's biography:</p>
-		<p>{{ user.biography|markdown|truncatewords_html:15 }}
-			<a href="/user/{{ user.id }}/">read more</a></p>
-		
-		{% if is_admin %}<p>This user is an admin!</p>{% endif %}
-	</div>
-{% endmacro %}
+Gonja's template syntax is mostly identical to Jinja2. Some of the included filters and tests might vary. The [Jinja2 documentation](https://jinja.palletsprojects.com/en/latest/templates/) is a great source for information on how to write the templates.
 
-<body>
-	<!-- Make use of the macro defined above to avoid repetitive HTML code
-	     since we want to use the same code for admins AND members -->
-	
-	<h1>Our admins</h1>
-	{% for admin in adminlist %}
-		{{ user_details(admin, true) }}
-	{% endfor %}
-	
-	<h1>Our members</h1>
-	{% for user in userlist %}
-		{{ user_details(user) }}
-	{% endfor %}
-</body>
-</html>
+### General Usage
+
+- quick start
+- customizing environment
+    - You can find a [list of all options here](https://pkg.go.dev/github.com/aisbergg/gonja/pkg/gonja#Option).
+- usage of tests and filters
+
+
+### Custom Filters and Tests
+
+
+### Custom Value Types
+
+
+### Handling of Undefined Variables
+
+
+### Extensions
+
+
+### References
+
+#### Tests
+
+The following tests are included in Gonja:
+
+| Name              | Description                                                       | Reference                                                                                         |
+| ----------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `callable` | Return whether the object is callable (i.e., some kind of function). | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.callable)            |
+| `defined` | Return true if the variable is defined. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#defined) |
+| `divisibleby` | Return true if the variable is divisible by the argument. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.divisibleby) |
+| `eq`</br>`equalto`</br>`==` | Return true if the expression is equal to the argument. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.eq) |
+| `even` | Return true if the variable is even. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.even) |
+| `ge`</br>`>=` | Return true if the expression is greater than or equal to the argument. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.ge) |
+| `gt`</br>`greaterthan`</br>`>` | Return true if the expression is greater than the argument. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.gt) |
+| `in` | Return true if the expression is contained in the argument. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.in) |
+| `iterable` | Return true if the variable is iterable. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.iterable) |
+| `le`</br>`<=` | Return true if the expression is less than or equal to the argument. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.le) |
+| `lower` | Return a copy of the string with all the cased characters converted to lowercase. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.lower) |
+| `lt`</br>`lessthan`</br>`<` | Return true if the expression is less than the argument. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.lt) |
+| `mapping` | Return true if the variable is a mapping (i.e., a dictionary). | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.mapping) |
+| `ne`</br>`!=` | Return true if the expression is not equal to the argument. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.ne) |
+| `none` | Return true if the variable is None. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.none) |
+| `number` | Return true if the variable is a number. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.number) |
+| `odd` | Return true if the variable is odd. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.odd) |
+| `sameas` | Return true if the expression is the same object as the argument. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.sameas) |
+| `sequence` | Return true if the variable is a sequence (i.e., a list or tuple). | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.sequence) |
+| `string` | Return true if the variable is a string. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.string) |
+| `undefined` | Return true if the variable is undefined. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.undefined) |
+| `upper` | Return a copy of the string with all the cased characters converted to uppercase. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-tests.upper) |
+
+<p align="right"><a href="#readme-top" alt="abc"><b>back to top ⇧</b></a></p>
+
+
+
+#### Filters
+
+The following filters are included in Gonja:
+
+| Name              | Description                                                       | Reference                                                                                         |
+| ----------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `abs`             | Return the absolute value of the argument.                        | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.abs)            |
+| `attr`            | Get an attribute of an object dynamically.                        | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.attr)           |
+| `batch`           | Group a sequence of objects into fixed-length chunks.             | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.batch)          |
+| `bool`            | Convert the value to a boolean.                                   | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.bool)           |
+| `boolean`         | Convert the value to a boolean.                                   | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.boolean)        |
+| `capitalize`      | Capitalize the first character of a string.                       | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.capitalize)     |
+| `center`          | Center a string in a field of a given width.                      | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.center)         |
+| `default`</br>`d` | Return a default value if the value is undefined.                 | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.default)        |
+| `dictsort`        | Sort a dictionary by key or value.                                | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.dictsort)       |
+| `escape`</br>`e`  | Escape a string for HTML rendering.                               | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.escape)         |
+| `filesizeformat`  | Convert a file size to a human-readable format.                   | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.filesizeformat) |
+| `first`           | Get the first item of a sequence.                                 | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.first)          |
+| `float`           | Convert the value to a floating-point number.                     | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.float)          |
+| `forceescape`     | Escape a string for HTML rendering, even if it is marked as safe. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.forceescape)    |
+| `format`          | Format a string using placeholders.                               | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.format)         |
+| `groupby`         | Group a sequence of objects by a common attribute.                | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.groupby)        |
+| `indent`          | Indent a string by a given number of spaces.                      | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.indent)         |
+| `int`             | Convert the value to an integer.                                  | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.int)            |
+| `integer`         | Convert the value to an integer.                                  | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.integer)        |
+| `join`            | Join a sequence of strings with a delimiter.                      | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.join)           |
+| `last`            | Get the last item of a sequence.                                  | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.last)           |
+| `length`          | Get the length of a sequence or a string.                         | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.length)         |
+| `list`            | Convert the value to a list.                                      | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.list)           |
+| `lower`           | Convert a string to lowercase.                                    | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.lower)          |
+| `map`             | Apply a filter to each item in a sequence.                        | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.map)            |
+| `max`             | Get the maximum value in a sequence.                              | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.max)            |
+| `min`             | Get the minimum value in a sequence.                              | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.min)            |
+| `pprint`          | Pretty-print a Python object.                                     | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.pprint)         |
+| `random`          | Get a random item from a sequence.                                | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.random)         |
+| `reject`          | Remove items from a sequence that match a condition.              | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.reject)         |
+| `rejectattr`      | Remove items from a sequence that have a certain attribute value. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.rejectattr)     |
+| `replace`         | Replace occurrences of a substring with another string.           | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.replace)        |
+| `reverse`         | Reverse the order of a sequence.                                  | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.reverse)        |
+| `round`           | Round a number to a given number of decimal places.               | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.round)          |
+| `safe`            | Mark a string as safe for HTML rendering.                         | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.safe)           |
+| `select`          | Select items from a sequence that match a condition.              | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.select)         |
+| `selectattr`      | Select items from a sequence that have a certain attribute value. | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.selectattr)     |
+| `slice`           | Get a slice of a sequence.                                        | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.slice)          |
+| `sort`            | Sort a sequence.                                                  | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.sort)           |
+| `string`          | Convert the value to a string.                                    | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.string)         |
+| `striptags`       | Remove HTML tags from a string.                                   | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.striptags)      |
+| `sum`             | Get the sum of a sequence of numbers.                             | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.sum)            |
+| `title`           | Convert a string to title case.                                   | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.title)          |
+| `tojson`          | Convert a value to a JSON string.                                 | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.tojson)         |
+| `trim`            | Remove whitespace from the beginning and end of a string.         | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.trim)           |
+| `truncate`        | Truncate a string to a given length.                              | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.truncate)       |
+| `unique`          | Remove duplicate items from a sequence.                           | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.unique)         |
+| `upper`           | Convert a string to uppercase.                                    | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.upper)          |
+| `urlencode`       | URL-encode a string.                                              | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.urlencode)      |
+| `urlize`          | Convert URLs and email addresses in a string to clickable links.  | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.urlize)         |
+| `wordcount`       | Count the number of words in a string.                            | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.wordcount)      |
+| `wordwrap`        | Wrap a string to a given width.                                   | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.wordwrap)       |
+| `xmlattr`         | Convert a dictionary to an XML attribute string.                  | [Jinja2 Ref](https://jinja.palletsprojects.com/en/latest/templates/#jinja-filters.xmlattr)        |
+
+<p align="right"><a href="#readme-top" alt="abc"><b>back to top ⇧</b></a></p>
+
+
+
+#### Tags
+
+
+
+<p align="right"><a href="#readme-top" alt="abc"><b>back to top ⇧</b></a></p>
+
+## Roadmap
+
+- [ ] add comparable benchmarks; include Go built-in template engine, [pongo2](https://github.com/flosch/pongo2), [liquid](https://github.com/osteele/liquid)
+- [ ] write more documentation
+- [ ] write more tests
+- [ ] clean up code
+- [ ] optimize code and performance
+
+## Benchmark
+
+Inside the `benchmark` directory reside some comparable benchmarks that allow some performance comparison of gonja with other error handling libraries. The benchmarks can be executed by running `make bench`. Here are my results:
+
+```plaintext
+cpu: AMD Ryzen 5 5600X 6-Core Processor             
+BenchmarkParse-12                   9858            107232 ns/op           85165 B/op        806 allocs/op
+BenchmarkExecute-12                 7198            156427 ns/op           86365 B/op       1971 allocs/op
+BenchmarkParallelExecute-12        16735             73162 ns/op          110357 B/op       1981 allocs/op
 ```
 
-## Features (and new in gonja)
-
- * Entirely rewritten from the ground-up.
- * [Advanced C-like expressions](https://github.com/aisbergg/gonja/blob/master/template_tests/expressions.tpl).
- * [Complex function calls within expressions](https://github.com/aisbergg/gonja/blob/master/template_tests/function_calls_wrapper.tpl).
- * [Easy API to create new filters and tags](http://godoc.org/github.com/aisbergg/gonja#RegisterFilter) ([including parsing arguments](http://godoc.org/github.com/aisbergg/gonja#Parser))
- * Additional features:
-    * Macros including importing macros from other files (see [template_tests/macro.tpl](https://github.com/aisbergg/gonja/blob/master/template_tests/macro.tpl))
-    * [Template sandboxing](https://godoc.org/github.com/aisbergg/gonja#TemplateSet) ([directory patterns](http://golang.org/pkg/path/filepath/#Match), banned tags/filters)
+<p align="right"><a href="#readme-top" alt="abc"><b>back to top ⇧</b></a></p>
 
 
-## How you can help
 
- * Write [filters](https://github.com/aisbergg/gonja/blob/master/builtins/filters.go#L3) / [statements](https://github.com/aisbergg/gonja/blob/master/builtins/statements.go#L4)
- * Write/improve code tests (use the following command to see what tests are missing: `go test -v -cover -covermode=count -coverprofile=cover.out && go tool cover -html=cover.out` or have a look on [gocover.io/github.com/aisbergg/gonja](http://gocover.io/github.com/aisbergg/gonja))
- * Write/improve template tests (see the `testdata/` directory)
- * Write middleware, libraries and websites using gonja. :-)
+## Contributing
 
-# Documentation
+If you have any suggestions, want to file a bug report or want to contribute to this project in some other way, please read the [contribution guideline](CONTRIBUTING.md).
 
-For a documentation on how the templating language works you can [head over to the Jinja documentation](https://jinja.palletsprojects.com). gonja aims to be compatible with it.
+And don't forget to give this project a star 🌟! Thanks again!
 
-You can access gonja's API documentation on [godoc](https://godoc.org/github.com/aisbergg/gonja).
+<p align="right"><a href="#readme-top" alt="abc"><b>back to top ⇧</b></a></p>
 
-## Caveats 
 
-### Filters
 
- * **format**: `format` does **not** take Python's string format syntax as a parameter, instead it takes Go's. Essentially `{{ 3.14|stringformat:"pi is %.2f" }}` is `fmt.Sprintf("pi is %.2f", 3.14)`.
- * **escape** / **force_escape**: Unlike Jinja's behaviour, the `escape`-filter is applied immediately. Therefore there is no need for a `force_escape`-filter yet.
+## License
 
-# API-usage examples
+Distributed under the MIT License. See `LICENSE` for more information.
 
-Please see the documentation for a full list of provided API methods.
+<p align="right"><a href="#readme-top" alt="abc"><b>back to top ⇧</b></a></p>
 
-## A tiny example (template string)
 
-```Go
-// Compile the template first (i. e. creating the AST)
-tpl, err := gonja.FromString("Hello {{ name|capfirst }}!")
-if err != nil {
-	panic(err)
-}
-// Now you can render the template with the given 
-// gonja.Context how often you want to.
-out, err := tpl.Execute(gonja.Context{"name": "axel"})
-if err != nil {
-	panic(err)
-}
-fmt.Println(out) // Output: Hello Axel!
-```
 
-## Example server-usage (template file)
+## Contact
 
-```Go
-package main
+André Lehmann
 
-import (
-	"github.com/aisbergg/gonja/pkg/gonja"
-	"net/http"
-)
+- Email: aisberg@posteo.de
+- [GitHub](https://github.com/aisbergg)
+- [LinkedIn](https://www.linkedin.com/in/andre-lehmann-97408221a/)
 
-// Pre-compiling the templates at application startup using the
-// little Must()-helper function (Must() will panic if FromFile()
-// or FromString() will return with an error - that's it).
-// It's faster to pre-compile it anywhere at startup and only
-// execute the template later.
-var tpl = gonja.Must(gonja.FromFile("example.html"))
+<p align="right"><a href="#readme-top" alt="abc"><b>back to top ⇧</b></a></p>
 
-func examplePage(w http.ResponseWriter, r *http.Request) {
-	// Execute the template per HTTP request
-	out, err := tpl.Execute(gonja.Context{"query": r.FormValue("query")})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-	w.WriteString(out)
-}
 
-func main() {
-	http.HandleFunc("/", examplePage)
-	http.ListenAndServe(":8080", nil)
-}
-```
 
-# Benchmark
+## Acknowledgments
 
-The benchmarks have been run on the my machine (`Intel(R) Core(TM) i7-2600 CPU @ 3.40GHz`) using the command:
+Gonja, initially developed by [Axel Haustant](https://github.com/noirbizarre), was built on [_pongo2_](https://github.com/flosch/pongo2), a template engine inspired by Django, created by [Florian Schlachter](https://github.com/flosch). Many other awesome folks have also contributed to the code. Shoutout to all of you for doing an amazing job!
 
-    go test -bench . -cpu 1,2,4,8
-
-All benchmarks are compiling (depends on the benchmark) and executing the `testdata/complex.tpl` template.
-
-The results are:
-
-	BenchmarkFromCache             	   30000	     41259 ns/op
-	BenchmarkFromCache-2           	   30000	     42776 ns/op
-	BenchmarkFromCache-4           	   30000	     44432 ns/op
-	BenchmarkFromFile              	    3000	    437755 ns/op
-	BenchmarkFromFile-2            	    3000	    472828 ns/op
-	BenchmarkFromFile-4            	    2000	    519758 ns/op
-	BenchmarkExecute               	   30000	     41984 ns/op
-	BenchmarkExecute-2             	   30000	     48546 ns/op
-	BenchmarkExecute-4             	   20000	    104469 ns/op
-	BenchmarkCompileAndExecute     	    3000	    428425 ns/op
-	BenchmarkCompileAndExecute-2   	    3000	    459058 ns/op
-	BenchmarkCompileAndExecute-4   	    3000	    488519 ns/op
-	BenchmarkParallelExecute       	   30000	     45262 ns/op
-	BenchmarkParallelExecute-2     	  100000	     23490 ns/op
-	BenchmarkParallelExecute-4     	  100000	     24206 ns/op
-
-Benchmarked on August 18th 2019.
+<p align="right"><a href="#readme-top" alt="abc"><b>back to top ⇧</b></a></p>
