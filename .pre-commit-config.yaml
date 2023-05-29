@@ -1,3 +1,5 @@
+exclude: "^pkg/gonja/testdata/"
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
@@ -17,5 +19,6 @@ repos:
       - id: gofumpt
       - id: golangci-lint
         exclude: "^(benchmarks|examples|tools)/"
+        require_serial: true
       - id: go-test
         exclude: "^(benchmarks|examples|tools)/"
